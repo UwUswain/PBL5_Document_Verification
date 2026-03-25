@@ -1,6 +1,32 @@
-runs/
-datasets/
-*.pt
+# --- PYTHON / BACKEND ---
 __pycache__/
+*.py[cod]
+*$py.class
 venv/
+.venv/
+env/
+# Bỏ qua các file cấu hình mật
 .env
+
+# --- AI / YOLO ---
+# Bỏ qua folder chứa kết quả huấn luyện và data nặng
+backend/runs/
+backend/datasets/
+# Bỏ qua các file trọng số (model weights)
+*.pt
+*.onnx
+*.engine
+
+# --- DATABASE ---
+# Nếu dùng SQLite (file .db), hãy chặn nó
+*.db
+*.sqlite3
+
+# --- FRONTEND (Node.js) ---
+node_modules/
+dist/
+.DS_Store
+
+# --- OTHERS ---
+.idea/
+.vscode/
