@@ -11,6 +11,7 @@ from app.modules.users.models import User
 from app.modules.documents.models import Document
 from app.shared.utils import calculate_sha256
 from app.modules.documents.schemas import DocumentOut
+from app.shared.utils.qr_services import generate_document_qr
 
 router = APIRouter()
 
@@ -35,9 +36,11 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 1. Đọc nội dung để tính Hash
     content = await file.read()
     file_hash = await calculate_sha256(content)
     
+    # 2. Kiểm tra trùng lặp
     query = select(Document).where(Document.sha256_hash == file_hash)
     result = await db.execute(query)
     existing_doc = result.scalar_one_or_none()
@@ -48,6 +51,7 @@ async def upload_document(
             detail=f"File này đã tồn tại trên hệ thống với ID: {existing_doc.id}"
         )
 
+    # 3. Lưu file vật lý
     file_ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{file_hash}{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
@@ -55,6 +59,7 @@ async def upload_document(
     async with aiofiles.open(file_path, "wb") as out_file:
         await out_file.write(content)
 
+    # 4. Lưu thông tin vào Database
     new_doc = Document(
         owner_id=current_user.id,
         file_name=file.filename,
@@ -67,9 +72,14 @@ async def upload_document(
     await db.commit()
     await db.refresh(new_doc)
 
+    #qr
+    # 5. Tạo mã QR dựa trên ID vừa có từ database
+    qr_url = await generate_document_qr(str(new_doc.id))
+
     return {
-        "message": "Đã lưu tài liệu thành công!",
+        "message": "Upload & Tạo QR thành công!",
         "document_id": str(new_doc.id),
         "sha256": file_hash,
-        "owner": current_user.email
+        "owner": current_user.email,
+        "qr_url": qr_url  # Trả về link này để Frontend hiển thị QR ngay lập tức
     }
