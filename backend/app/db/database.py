@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from app.core.config import get_settings
 
 settings = get_settings()
+print(f" Debug: URL hiện tại là -> '{settings.DATABASE_URL}'")
 
 # 1. Tạo Engine bất đồng bộ
 engine = create_async_engine(

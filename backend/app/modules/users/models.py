@@ -1,7 +1,7 @@
 import enum
 from sqlalchemy import String, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
-from backend.app.models.base import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
+from app.db.base import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
 
 class UserRole(enum.Enum):
     USER = "USER"

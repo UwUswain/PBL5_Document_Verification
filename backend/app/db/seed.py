@@ -1,3 +1,12 @@
+import sys
+import os
+from pathlib import Path
+
+# 1. Định vị folder 'backend' để Python tìm thấy folder 'app'
+backend_path = str(Path(__file__).resolve().parent.parent.parent)
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path) 
+
 import asyncio
 from app.db.database import AsyncSessionLocal, engine
 from app.modules.users.models import User, UserRole
@@ -5,7 +14,7 @@ from app.core.security import hash_password
 from sqlalchemy import select
 
 async def seed_data():
-    print("Đang bắt đầu quá trình Seed dữ liệu Admin...")
+    print("🌱 Đang bắt đầu quá trình Seed dữ liệu Admin...")
     async with AsyncSessionLocal() as db:
         try:
             # 1. Kiểm tra xem đã có Admin nào chưa
@@ -15,22 +24,26 @@ async def seed_data():
             admin_user = result.scalar_one_or_none()
 
             if not admin_user:
-                # 2. Tạo Admin mẫu (Bảo mật tuyệt đối bằng băm mật khẩu)
+                # 2. Tạo Admin mới hoàn toàn
                 new_admin = User(
                     email="admin@pbl5.com",
-                    password_hash=hash_password("123456"), # Mật khẩu test
+                    password_hash=hash_password("123456"), 
                     role=UserRole.ADMIN
                 )
                 db.add(new_admin)
-                await db.commit()
-                print("✅ Đã tạo tài khoản Admin thành công: admin@pbl5.com / 123456")
+                print("✅ Đã tạo tài khoản Admin mới: admin@pbl5.com / 123456")
             else:
-                print("ℹ️ Tài khoản Admin đã tồn tại rồi , không cần tạo thêm đâu.")
+                # 3. FIX LỖI: Cập nhật lại mật khẩu băm chuẩn cho Admin đã tồn tại
+                admin_user.password_hash = hash_password("123456")
+                print("🔄 Đã cập nhật lại mật khẩu băm chuẩn cho Admin hiện có!")
+            
+            # Lưu thay đổi vào Database
+            await db.commit()
+            print("🚀 Tất cả đã sẵn sàng để Login!")
                 
         except Exception as e:
-            print(f"❌ Lỗi to rồi long ơi: {str(e)}")
+            print(f"❌ Lỗi rồi bro ơi: {str(e)}")
             await db.rollback()
 
 if __name__ == "__main__":
-    # Chạy hàm seed bằng asyncio
     asyncio.run(seed_data())
