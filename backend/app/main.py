@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles 
+import os
 from contextlib import asynccontextmanager
 
 from app.core.config import get_settings
@@ -28,17 +30,20 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan
 )
+# 2.5 MOUNT STATIC FILES: Để giao diện có thể hiển thị ảnh
+# Đảm bảo đường dẫn "backend/storage" là đúng so với thư mục gốc Rebuild
+app.mount("/storage", StaticFiles(directory="backend/storage"), name="storage")
 
 # 3. MIDDLEWARE: Phải nằm TRƯỚC Router để xử lý quyền truy cập
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"], # Cho phép tất cả để không bị lỗi 403/Forbidden khi test UI
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 4. BƯỚC CHÈN ROUTER: Nằm sau Middleware và trước Health Check
+# 4. ROUTER: Nằm sau Middleware và trước Health Check
 # Điều này giúp Swagger UI (docs) sắp xếp các nhóm API đẹp hơn
 app.include_router(users_router, prefix="/api/users", tags=["Users Management"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])

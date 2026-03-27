@@ -2,88 +2,91 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PBL5 - Document Verification</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBL5 - Document AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<script>
-    const fileInput = document.getElementById('fileInput');
-    const resultDiv = document.getElementById('result');
-    const originalImg = document.getElementById('originalImg');
-
-    // 1. Xử lý hiển thị ảnh Preview ngay khi chọn file
-    fileInput.onchange = evt => {
-        const [file] = fileInput.files;
-        if (file) {
-            originalImg.src = URL.createObjectURL(file);
-            resultDiv.classList.remove('hidden'); // Hiện vùng kết quả
-        }
-    }
-
-async function uploadFile() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file) {
-        alert("Chọn ảnh đã bro!");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-        const response = await fetch("/upload-seal", {
-            method: "POST",
-            body: formData
-        });
-        const data = await response.json();
-
-        if (data.status === "success") {
-            // Hiện vùng kết quả và gán ảnh vào
-            document.getElementById('result').classList.remove('hidden');
-            document.getElementById('originalImg').src = data.original_url;
-            document.getElementById('sealImg').src = data.processed_url;
-            alert("Đã tách xong con dấu!");
-        }
-    } catch (error) {
-        console.error("Lỗi upload:", error);
-    }
-}
-
-</script>
-<body class="bg-gray-100 font-sans">
-    <div class="container mx-auto py-10">
-        <h1 class="text-3xl font-bold text-center text-blue-600 mb-10">
-            Hệ Thống Xác Thực Con Dấu & Chữ Ký (PBL5)
-        </h1>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <h1 class="text-2xl font-bold text-blue-600 mb-6 text-center">PBL5: XÁC THỰC VĂN BẢN HÀNH CHÍNH</h1>
         
-        <div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
-            <h2 class="text-xl font-semibold mb-4">Tải lên tài liệu cần kiểm tra</h2>
-            
-            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition">
-                <input type="file" id="fileInput" class="hidden" accept="image/*">
-                <label for="fileInput" class="cursor-pointer">
-                    <p class="text-gray-600">Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
-                </label>
-            </div>
-
-            <button onclick="uploadFile()" class="w-full mt-6 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600">
-                Bắt đầu xác thực
-            </button>
+        <div id="login-section" class="mb-8 p-4 border rounded">
+            <h2 class="font-semibold mb-2">1. Đăng nhập Admin</h2>
+            <input id="email" type="email" value="admin@pbl5.com" class="border p-2 mr-2 rounded">
+            <input id="password" type="password" value="123456" class="border p-2 mr-2 rounded">
+            <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Login</button>
+            <p id="token-status" class="mt-2 text-sm text-gray-500 italic"></p>
         </div>
 
-        <div id="result" class="mt-10 max-w-2xl mx-auto hidden">
-            <h3 class="font-bold mb-2">Kết quả phân tích:</h3>
-            <div class="grid grid-cols-2 gap-4">
-                <div>
-                    <p class="text-sm">Ảnh gốc:</p>
-                    <img id="originalImg" class="rounded border">
-                </div>
-                <div>
-                    <p class="text-sm">Vùng con dấu:</p>
-                    <img id="sealImg" class="rounded border">
-                </div>
-            </div>
+        <div id="upload-section" class="mb-8 p-4 border rounded hidden">
+            <h2 class="font-semibold mb-2">2. Upload Tài liệu cần xác thực</h2>
+            <input id="file-input" type="file" class="mb-2">
+            <button onclick="uploadFile()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Upload & Verify</button>
+        </div>
+
+        <div id="list-section" class="hidden">
+            <h2 class="font-semibold mb-2">3. Danh sách tài liệu đã lưu</h2>
+            <div id="doc-list" class="space-y-2"></div>
         </div>
     </div>
+
+    <script>
+        let token = "";
+        const API_BASE = "http://127.0.0.1:8000/api";
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const formData = new FormData();
+            formData.append('username', email);
+            formData.append('password', password);
+
+            const res = await fetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            if (data.access_token) {
+                token = data.access_token;
+                document.getElementById('token-status').innerText = "✅ Đã có Token! readytoroll.";
+                document.getElementById('upload-section').classList.remove('hidden');
+                document.getElementById('list-section').classList.remove('hidden');
+                loadDocuments();
+            } else {
+                alert("Login tạch rồi em ơi!");
+            }
+        }
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('file-input');
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const res = await fetch(`${API_BASE}/docs/upload`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+            const data = await res.json();
+            alert(data.message || data.detail);
+            loadDocuments();
+        }
+
+        async function loadDocuments() {
+            const res = await fetch(`${API_BASE}/docs/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const docs = await res.json();
+            const listDiv = document.getElementById('doc-list');
+            listDiv.innerHTML = docs.map(d => `
+                <div class="p-3 bg-gray-50 border-l-4 border-blue-400 rounded flex justify-between items-center">
+                    <div>
+                        <p class="font-medium">${d.file_name}</p>
+                        <p class="text-xs text-gray-400">Hash: ${d.sha256_hash.substring(0,20)}...</p>
+                    </div>
+                    <span class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">${d.status}</span>
+                </div>
+            `).join('');
+        }
+    </script>
 </body>
 </html>
