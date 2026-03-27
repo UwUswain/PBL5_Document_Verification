@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PBL5 - Document Verification</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const resultDiv = document.getElementById('result');
+    const originalImg = document.getElementById('originalImg');
+
+    // 1. Xử lý hiển thị ảnh Preview ngay khi chọn file
+    fileInput.onchange = evt => {
+        const [file] = fileInput.files;
+        if (file) {
+            originalImg.src = URL.createObjectURL(file);
+            resultDiv.classList.remove('hidden'); // Hiện vùng kết quả
+        }
+    }
+
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file) {
+        alert("Chọn ảnh đã bro!");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("/upload-seal", {
+            method: "POST",
+            body: formData
+        });
+        const data = await response.json();
+
+        if (data.status === "success") {
+            // Hiện vùng kết quả và gán ảnh vào
+            document.getElementById('result').classList.remove('hidden');
+            document.getElementById('originalImg').src = data.original_url;
+            document.getElementById('sealImg').src = data.processed_url;
+            alert("Đã tách xong con dấu!");
+        }
+    } catch (error) {
+        console.error("Lỗi upload:", error);
+    }
+}
+
+</script>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto py-10">
+        <h1 class="text-3xl font-bold text-center text-blue-600 mb-10">
+            Hệ Thống Xác Thực Con Dấu & Chữ Ký (PBL5)
+        </h1>
+        
+        <div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Tải lên tài liệu cần kiểm tra</h2>
+            
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition">
+                <input type="file" id="fileInput" class="hidden" accept="image/*">
+                <label for="fileInput" class="cursor-pointer">
+                    <p class="text-gray-600">Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
+                </label>
+            </div>
+
+            <button onclick="uploadFile()" class="w-full mt-6 bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600">
+                Bắt đầu xác thực
+            </button>
+        </div>
+
+        <div id="result" class="mt-10 max-w-2xl mx-auto hidden">
+            <h3 class="font-bold mb-2">Kết quả phân tích:</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-sm">Ảnh gốc:</p>
+                    <img id="originalImg" class="rounded border">
+                </div>
+                <div>
+                    <p class="text-sm">Vùng con dấu:</p>
+                    <img id="sealImg" class="rounded border">
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
