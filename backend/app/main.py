@@ -8,6 +8,7 @@ from app.db.session import init_db
 
 # 1. BƯỚC CHÈN IMPORT: Đặt cùng nhóm với các module khác
 from app.modules.users.router import router as users_router
+from app.modules.auth.router import router as auth_router
 # from app.modules.auth.router import router as auth_router
 # from app.modules.documents.router import router as doc_router
 
@@ -39,6 +40,7 @@ app.add_middleware(
 # 4. BƯỚC CHÈN ROUTER: Nằm sau Middleware và trước Health Check
 # Điều này giúp Swagger UI (docs) sắp xếp các nhóm API đẹp hơn
 app.include_router(users_router, prefix="/api/users", tags=["Users Management"])
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 # app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 # app.include_router(doc_router, prefix="/api/docs", tags=["Document Verification"])
 

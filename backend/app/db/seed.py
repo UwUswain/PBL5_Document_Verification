@@ -1,31 +1,36 @@
-from backend.app.db.session import SessionLocal
-from backend.app.models.user import User, UserRole
+import asyncio
+from app.db.database import AsyncSessionLocal, engine
+from app.modules.users.models import User, UserRole
+from app.core.security import hash_password
+from sqlalchemy import select
 
-def seed_admin():
-    # Mở một phiên làm việc với DB
-    db = SessionLocal()
-    try:
-        # 1. Khởi tạo đối tượng User (Đóng gói dữ liệu)
-        new_admin = User(
-            email="admin@pbl5.com",
-            password_hash="hashed_password_123", # Tạm thời để text, sau này sẽ hash thật
-            role=UserRole.ADMIN
-        )
-        
-        # 2. Thêm vào DB
-        db.add(new_admin)
-        db.commit() # Xác nhận lưu
-        db.refresh(new_admin)
-        
-        print(f"✅ Đã tạo Admin thành công!")
-        print(f"🆔 ID tự sinh (UUID): {new_admin.id}")
-        print(f"🕒 Ngày tạo: {new_admin.created_at}")
-        
-    except Exception as e:
-        print(f"❌ Lỗi TO rồi: {e}")
-        db.rollback()
-    finally:
-        db.close()
+async def seed_data():
+    print("Đang bắt đầu quá trình Seed dữ liệu Admin...")
+    async with AsyncSessionLocal() as db:
+        try:
+            # 1. Kiểm tra xem đã có Admin nào chưa
+            result = await db.execute(
+                select(User).where(User.email == "admin@pbl5.com")
+            )
+            admin_user = result.scalar_one_or_none()
+
+            if not admin_user:
+                # 2. Tạo Admin mẫu (Bảo mật tuyệt đối bằng băm mật khẩu)
+                new_admin = User(
+                    email="admin@pbl5.com",
+                    password_hash=hash_password("123456"), # Mật khẩu test
+                    role=UserRole.ADMIN
+                )
+                db.add(new_admin)
+                await db.commit()
+                print("✅ Đã tạo tài khoản Admin thành công: admin@pbl5.com / 123456")
+            else:
+                print("ℹ️ Tài khoản Admin đã tồn tại rồi , không cần tạo thêm đâu.")
+                
+        except Exception as e:
+            print(f"❌ Lỗi to rồi long ơi: {str(e)}")
+            await db.rollback()
 
 if __name__ == "__main__":
-    seed_admin()
+    # Chạy hàm seed bằng asyncio
+    asyncio.run(seed_data())
