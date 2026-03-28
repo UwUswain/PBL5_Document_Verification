@@ -19,7 +19,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     file_name: Mapped[str] = mapped_column(String, nullable=False)
     file_path: Mapped[str] = mapped_column(String, nullable=False)
     
-    # 3. Bảo mật (Linh hồn của PBL5)
+    # 3. Bảo mật
     sha256_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     
     # 4. Kết quả từ AI (Lưu tọa độ JSON)

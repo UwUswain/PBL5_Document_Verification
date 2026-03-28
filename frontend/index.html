@@ -1,32 +1,64 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PBL5 - Document AI</title>
+    <title>PBL5 - Document AI Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100 min-h-screen p-8">
-    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 class="text-2xl font-bold text-blue-600 mb-6 text-center">PBL5: XÁC THỰC VĂN BẢN HÀNH CHÍNH</h1>
-        
-        <div id="login-section" class="mb-8 p-4 border rounded">
-            <h2 class="font-semibold mb-2">1. Đăng nhập Admin</h2>
-            <input id="email" type="email" value="admin@pbl5.com" class="border p-2 mr-2 rounded">
-            <input id="password" type="password" value="123456" class="border p-2 mr-2 rounded">
-            <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Login</button>
-            <p id="token-status" class="mt-2 text-sm text-gray-500 italic"></p>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+    <div class="flex">
+        <div class="w-64 bg-slate-800 h-screen p-6 shadow-xl hidden md:block">
+            <h2 class="text-2xl font-bold text-blue-400 mb-10"><i class="fas fa-shield-halved mr-2"></i>PBL5 AI</h2>
+            <nav class="space-y-4">
+                <a href="#" class="block p-3 bg-blue-600 rounded-lg"><i class="fas fa-home mr-2"></i> Dashboard</a>
+                <a href="#" class="block p-3 hover:bg-slate-700 rounded-lg transition"><i class="fas fa-file-invoice mr-2"></i> Documents</a>
+                <a href="#" class="block p-3 hover:bg-slate-700 rounded-lg transition"><i class="fas fa-chart-line mr-2"></i> Analytics</a>
+            </nav>
         </div>
 
-        <div id="upload-section" class="mb-8 p-4 border rounded hidden">
-            <h2 class="font-semibold mb-2">2. Upload Tài liệu cần xác thực</h2>
-            <input id="file-input" type="file" class="mb-2">
-            <button onclick="uploadFile()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Upload & Verify</button>
-        </div>
+        <div class="flex-1 p-8">
+            <header class="flex justify-between items-center mb-10">
+                <h1 class="text-3xl font-bold">Quản lý Tài liệu</h1>
+                <div id="user-info" class="bg-slate-800 px-4 py-2 rounded-full border border-slate-700">
+                    <span id="token-status" class="text-yellow-500 text-sm"><i class="fas fa-user-lock mr-2"></i>Chưa đăng nhập</span>
+                </div>
+            </header>
 
-        <div id="list-section" class="hidden">
-            <h2 class="font-semibold mb-2">3. Danh sách tài liệu đã lưu</h2>
-            <div id="doc-list" class="space-y-2"></div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                    <h3 class="text-xl font-semibold mb-4 text-blue-400">Tải lên tài liệu</h3>
+                    <div id="login-form" class="space-y-4 mb-6">
+                        <input id="email" type="email" value="admin@pbl5.com" class="w-full bg-slate-900 border border-slate-700 p-2 rounded text-sm">
+                        <input id="password" type="password" value="123456" class="w-full bg-slate-900 border border-slate-700 p-2 rounded text-sm">
+                        <button onclick="login()" class="w-full bg-blue-600 py-2 rounded font-bold hover:bg-blue-500">Đăng nhập</button>
+                    </div>
+
+                    <div id="upload-form" class="hidden space-y-4">
+                        <label class="block border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-blue-500 cursor-pointer transition">
+                            <input id="file-input" type="file" class="hidden" onchange="updateFileName()">
+                            <i class="fas fa-cloud-upload-alt text-4xl mb-2 text-slate-500"></i>
+                            <p id="file-name" class="text-sm text-slate-400">Nhấn để chọn ảnh (.png, .jpg)</p>
+                        </label>
+                        <button onclick="uploadFile()" class="w-full bg-green-600 py-2 rounded font-bold hover:bg-green-500">Xác thực ngay</button>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                    <h3 class="text-xl font-semibold mb-4 text-blue-400">Danh sách gần đây</h3>
+                    <div id="doc-list" class="space-y-4 overflow-y-auto max-h-[500px] pr-2">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="qr-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-3xl text-center max-w-sm w-full">
+            <h3 class="text-slate-900 text-xl font-bold mb-4">Mã QR Chứng thực</h3>
+            <img id="qr-display" src="" class="mx-auto w-64 h-64 mb-4 border p-2">
+            <button onclick="document.getElementById('qr-modal').classList.add('hidden')" class="bg-slate-900 text-white px-6 py-2 rounded-full">Đóng</button>
         </div>
     </div>
 
@@ -34,56 +66,55 @@
         let token = "";
         const API_BASE = "http://127.0.0.1:8000/api";
 
-        async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            
-            const formData = new FormData();
-            formData.append('username', email);
-            formData.append('password', password);
+        function updateFileName() {
+            const input = document.getElementById('file-input');
+            document.getElementById('file-name').innerText = input.files[0].name;
+        }
 
+        async function login() {
+            const formData = new FormData();
+            formData.append('username', document.getElementById('email').value);
+            formData.append('password', document.getElementById('password').value);
             const res = await fetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
             const data = await res.json();
-            
             if (data.access_token) {
                 token = data.access_token;
-                document.getElementById('token-status').innerText = "✅ Đã có Token! readytoroll.";
-                document.getElementById('upload-section').classList.remove('hidden');
-                document.getElementById('list-section').classList.remove('hidden');
+                document.getElementById('token-status').innerHTML = "✅ Admin: " + document.getElementById('email').value;
+                document.getElementById('login-form').classList.add('hidden');
+                document.getElementById('upload-form').classList.remove('hidden');
                 loadDocuments();
-            } else {
-                alert("Login tạch rồi em ơi!");
             }
         }
 
         async function uploadFile() {
-            const fileInput = document.getElementById('file-input');
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
+            formData.append('file', document.getElementById('file-input').files[0]);
             const res = await fetch(`${API_BASE}/docs/upload`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
             const data = await res.json();
-            alert(data.message || data.detail);
-            loadDocuments();
+            if (data.qr_url) {
+                document.getElementById('qr-display').src = `http://127.0.0.1:8000${data.qr_url}`;
+                document.getElementById('qr-modal').classList.remove('hidden');
+                loadDocuments();
+            }
         }
 
         async function loadDocuments() {
-            const res = await fetch(`${API_BASE}/docs/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const res = await fetch(`${API_BASE}/docs/`, { headers: { 'Authorization': `Bearer ${token}` } });
             const docs = await res.json();
-            const listDiv = document.getElementById('doc-list');
-            listDiv.innerHTML = docs.map(d => `
-                <div class="p-3 bg-gray-50 border-l-4 border-blue-400 rounded flex justify-between items-center">
-                    <div>
-                        <p class="font-medium">${d.file_name}</p>
-                        <p class="text-xs text-gray-400">Hash: ${d.sha256_hash.substring(0,20)}...</p>
+            document.getElementById('doc-list').innerHTML = docs.reverse().map(d => `
+                <div class="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-700 rounded-xl hover:bg-slate-700 transition">
+                    <div class="flex items-center space-x-4">
+                        <div class="bg-blue-500/10 p-3 rounded-lg"><i class="far fa-file-image text-blue-400"></i></div>
+                        <div>
+                            <p class="font-semibold text-sm">${d.file_name}</p>
+                            <p class="text-[10px] text-slate-500 font-mono">${d.sha256_hash.substring(0,32)}...</p>
+                        </div>
                     </div>
-                    <span class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">${d.status}</span>
+                    <span class="px-3 py-1 bg-yellow-500/10 text-yellow-500 text-[10px] font-bold rounded-full uppercase">${d.status}</span>
                 </div>
             `).join('');
         }

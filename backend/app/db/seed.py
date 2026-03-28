@@ -14,7 +14,7 @@ from app.core.security import hash_password
 from sqlalchemy import select
 
 async def seed_data():
-    print("🌱 Đang bắt đầu quá trình Seed dữ liệu Admin...")
+    print("Đang bắt đầu quá trình Seed dữ liệu Admin...")
     async with AsyncSessionLocal() as db:
         try:
             # 1. Kiểm tra xem đã có Admin nào chưa
@@ -39,10 +39,10 @@ async def seed_data():
             
             # Lưu thay đổi vào Database
             await db.commit()
-            print("🚀 Tất cả đã sẵn sàng để Login!")
+            print("Ready to Roll !")
                 
         except Exception as e:
-            print(f"❌ Lỗi rồi bro ơi: {str(e)}")
+            print(f"❌ Lỗi errrrrr: {str(e)}")
             await db.rollback()
 
 if __name__ == "__main__":
