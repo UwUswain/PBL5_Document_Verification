@@ -30,3 +30,8 @@ dist/
 # --- OTHERS ---
 .idea/
 .vscode/
+
+# Ignore storage folders (Dữ liệu test không đẩy lên GitHub)
+backend/storage/upload/*
+backend/storage/qrcode/*
+!backend/storage/.gitkeep
