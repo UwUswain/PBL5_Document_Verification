@@ -7,11 +7,14 @@ from typing import List
 
 from app.db.database import get_db
 from app.core.security import get_current_user
+from app.core.security import role_required
 from app.modules.users.models import User
 from app.modules.documents.models import Document
+from app.modules.documents.service import DocumentService
 from app.shared.utils import calculate_sha256
 from app.modules.documents.schemas import DocumentOut
 from app.shared.utils.qr_services import generate_document_qr
+from backend.app import db
 
 router = APIRouter()
 
@@ -34,11 +37,10 @@ async def get_my_documents(
 async def upload_document(
     file: UploadFile = File(...), 
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(role_required(["admin"]))
 ):
     # 1. Đọc nội dung để tính Hash
-    content = await file.read()
-    file_hash = await calculate_sha256(content)
+    return await DocumentService.process_upload(file, current_user.id, db)
     
     # 2. Kiểm tra trùng lặp
     query = select(Document).where(Document.sha256_hash == file_hash)

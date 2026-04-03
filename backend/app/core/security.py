@@ -30,8 +30,12 @@ def create_access_token(subject: str, role: str, expires_delta: Optional[timedel
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    # Nén cả email và quyền (role) vào token
-    to_encode = {"exp": expire, "sub": str(subject), "role": role}
+    # Nén cả 'sub' (email) và 'role' (quyền) vào payload của JWT
+    to_encode = {
+        "exp": expire, 
+        "sub": str(subject),
+        "role": role  # <--- Quan trọng để phân quyền nhanh
+    }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
@@ -60,7 +64,7 @@ async def get_current_user(
         raise credentials_exception
     return user
 
-# 5. HÀM MỚI: Màng lọc phân quyền (Role Checker)
+# 5. Ham Màng lọc phân quyền(Role Checker)
 def role_required(allowed_roles: list):
     async def role_checker(current_user: User = Depends(get_current_user)):
         # Kiểm tra xem role của user có nằm trong danh sách cho phép không

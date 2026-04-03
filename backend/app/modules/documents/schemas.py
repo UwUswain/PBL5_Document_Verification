@@ -9,6 +9,8 @@ class DocumentOut(BaseModel):
     sha256_hash: str
     status: str
     created_at: datetime
+    qr_path: Optional[str] = None
+    # -----------------------------
 
     class Config:
         from_attributes = True

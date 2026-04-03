@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional # THÊM DÒNG NÀY VÀO BRO ƠI!
+from typing import Optional #
 from sqlalchemy import String, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,6 +21,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     
     # 3. Bảo mật
     sha256_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    qr_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     
     # 4. Kết quả từ AI (Lưu tọa độ JSON)
     ai_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
