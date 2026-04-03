@@ -31,7 +31,7 @@ dist/
 .idea/
 .vscode/
 
-# Ignore storage folders (Dữ liệu test không đẩy lên GitHub)
+# Ignore storage folders
 backend/storage/upload/*
 backend/storage/qrcode/*
 !backend/storage/.gitkeep

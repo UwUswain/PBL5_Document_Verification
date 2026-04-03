@@ -1,11 +1,13 @@
 import enum
 from sqlalchemy import String, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
 from app.db.base import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
 
+#định nghĩa role
 class UserRole(enum.Enum):
-    USER = "USER"
-    ADMIN = "ADMIN"
+    ADMIN = "admin"
+    USER = "user"
 
 class User(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     """
