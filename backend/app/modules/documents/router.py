@@ -14,7 +14,6 @@ from app.modules.documents.service import DocumentService
 from app.shared.utils import calculate_sha256
 from app.modules.documents.schemas import DocumentOut
 from app.shared.utils.qr_services import generate_document_qr
-from backend.app import db
 
 router = APIRouter()
 

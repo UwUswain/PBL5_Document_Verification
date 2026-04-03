@@ -22,6 +22,13 @@ async def login(
             detail="Email hoặc mật khẩu không đúng bro ơi!",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+# 1. Gọi hàm tạo token với đầy đủ 2 tham số: subject và role
+    # Lưu ý: user.role là Enum nên dùng .value để lấy chuỗi "admin" hoặc "user"
+    access_token = create_access_token(
+        subject=user.email, 
+        role=user.role.value 
+    )
     
-    access_token = create_access_token(subject=user.email)
+    # 2. Trả về token cho Frontend/Swagger
     return {"access_token": access_token, "token_type": "bearer"}
