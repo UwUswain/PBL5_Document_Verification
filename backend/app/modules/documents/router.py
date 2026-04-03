@@ -14,22 +14,31 @@ from app.modules.documents.service import DocumentService
 from app.shared.utils import calculate_sha256
 from app.modules.documents.schemas import DocumentOut
 from app.shared.utils.qr_services import generate_document_qr
+from app.modules import documents
 
 router = APIRouter()
 
 UPLOAD_DIR = "backend/storage/uploads"
 
-# 1. API Lấy danh sách tài liệu (GET)
-@router.get("/", response_model=List[DocumentOut])
-async def get_my_documents(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Lấy toàn bộ tài liệu mà Admin hiện tại đã upload"""
-    query = select(Document).where(Document.owner_id == current_user.id)
-    result = await db.execute(query)
-    documents = result.scalars().all()
-    return documents
+# # 1. API Lấy danh sách tài liệu (GET) tạm thời để test
+# @router.get("/", response_model=List[DocumentOut])
+# async def get_my_documents(
+#     db: AsyncSession = Depends(get_db),
+#     current_user: User = Depends(get_current_user)
+# ):
+#     """Lấy toàn bộ tài liệu mà Admin hiện tại đã upload"""
+#     query = select(Document).where(Document.owner_id == current_user.id)
+#     result = await db.execute(query)
+#     documents = result.scalars().all()
+#     return documents
+
+@router.get("/verify/{document_id}", tags=["Public Verification"])
+async def public_verify_document(document_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Document).where(Document.id == document_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+    return doc # Trả về full info để verify.html hiện lên
 
 # 2. API Upload tài liệu (POST)
 @router.post("/upload", status_code=status.HTTP_201_CREATED)

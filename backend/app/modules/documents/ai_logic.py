@@ -29,7 +29,7 @@ class SealDetector:
         try:
             model = SealDetector.get_model()
             # Để conf=0.1 để demo dễ ra kết quả hơn khi mAP còn thấp
-            results = model.predict(image_path, conf=0.1)
+            results = model.predict(image_path, conf=0.01)
             
             detections = []
             for r in results:

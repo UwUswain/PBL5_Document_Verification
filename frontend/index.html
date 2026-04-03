@@ -62,80 +62,133 @@
         </div>
     </div>
 
+    <body class="bg-slate-900 text-white flex items-center justify-center min-h-screen">
+    <div id="result" class="p-8 bg-slate-800 rounded-3xl shadow-2xl text-center max-w-sm">
+        <h2 class="text-xl font-bold mb-4">KẾT QUẢ XÁC THỰC</h2>
+        <div id="content" class="animate-pulse">Đang kiểm tra...</div>
+    </div>
     <script>
-        let token = "";
-        const API_BASE = "http://127.0.0.1:8000/api";
-
-        function updateFileName() {
-            const input = document.getElementById('file-input');
-            document.getElementById('file-name').innerText = input.files[0].name;
-        }
-
-        async function login() {
-            const formData = new FormData();
-            formData.append('username', document.getElementById('email').value);
-            formData.append('password', document.getElementById('password').value);
-            const res = await fetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
-            const data = await res.json();
-            if (data.access_token) {
-                token = data.access_token;
-                document.getElementById('token-status').innerHTML = "✅ Admin: " + document.getElementById('email').value;
-                document.getElementById('login-form').classList.add('hidden');
-                document.getElementById('upload-form').classList.remove('hidden');
-                loadDocuments();
-            }
-        }
-
-        async function uploadFile() {
-            const formData = new FormData();
-            formData.append('file', document.getElementById('file-input').files[0]);
-            const res = await fetch(`${API_BASE}/docs/upload`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-                body: formData
+        const params = new URLSearchParams(window.location.search);
+        const docId = params.get('id');
+        // Gọi API công khai để check (Ko cần token cũng được nếu bro muốn demo nhanh)
+        fetch(`http://192.168.100.236:8000/api/docs/verify/${docId}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('content').innerHTML = `
+                    <div class="text-green-400 text-5xl mb-4">✅</div>
+                    <p class="font-bold text-lg text-green-500">VĂN BẢN HỢP LỆ</p>
+                    <p class="text-xs mt-2 text-slate-400">File: ${data.file_name}</p>
+                    <p class="text-[10px] break-all mt-1">Hash: ${data.sha256_hash}</p>
+                `;
+                document.getElementById('content').classList.remove('animate-pulse');
             });
-            const data = await res.json();
-            if (data.qr_url) {
-                document.getElementById('qr-display').src = `http://127.0.0.1:8000${data.qr_url}`;
-                document.getElementById('qr-modal').classList.remove('hidden');
-                loadDocuments();
-            }
-        }
+    </script>
+</body>
 
-async function loadDocuments() {
-            try {
-                const res = await fetch(`${API_BASE}/docs/`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const docs = await res.json();
-                
-                // Đảo ngược danh sách để cái mới nhất lên đầu
+<script>
+    let token = localStorage.getItem('pbl5_token') || "";
+    const API_BASE = "http://127.0.0.1:8000/api";
+
+    // Hàm cập nhật giao diện khi Logout/Token hết hạn
+    function forceLogin() {
+        token = "";
+        localStorage.removeItem('pbl5_token');
+        document.getElementById('login-form').classList.remove('hidden');
+        document.getElementById('upload-form').classList.add('hidden');
+        document.getElementById('token-status').innerHTML = "❌ Hết hạn - Đăng nhập lại";
+    }
+
+    async function login() {
+        const formData = new FormData();
+        formData.append('username', document.getElementById('email').value);
+        formData.append('password', document.getElementById('password').value);
+        
+        const res = await fetch(`${API_BASE}/auth/login`, { method: 'POST', body: formData });
+        const data = await res.json();
+        
+        if (data.access_token) {
+            token = data.access_token;
+            localStorage.setItem('pbl5_token', token);
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('upload-form').classList.remove('hidden');
+            document.getElementById('token-status').innerHTML = "✅ Admin đang hoạt động";
+            loadDocuments();
+        } else {
+            alert("Sai tài khoản hoặc mật khẩu!");
+        }
+    }
+
+    async function uploadFile() {
+        const fileInput = document.getElementById('file-input');
+        if (!fileInput.files[0]) return alert("Chọn file đã bro!");
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        const res = await fetch(`${API_BASE}/docs/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        if (res.status === 401) return forceLogin(); // Nếu lỗi quyền, bắt login lại
+
+        const data = await res.json();
+        if (data.qr_url) {
+            document.getElementById('qr-display').src = `http://127.0.0.1:8000${data.qr_url}`;
+            document.getElementById('qr-modal').classList.remove('hidden');
+            loadDocuments();
+        } else if (data.detail) {
+            alert(data.detail); // Hiện lỗi "File đã tồn tại" (400)
+        }
+    }
+
+    async function loadDocuments() {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE}/docs/`, { 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            });
+
+            if (res.status === 401) return forceLogin(); // Fix lỗi văng tài khoản
+
+            const docs = await res.json();
+            
+            // CHECK QUAN TRỌNG: Chỉ reverse nếu docs là mảng
+            if (Array.isArray(docs)) {
                 document.getElementById('doc-list').innerHTML = docs.reverse().map(d => `
-                    <div class="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-700 rounded-xl hover:bg-slate-700 transition mb-3">
+                    <div class="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-700 rounded-xl hover:bg-slate-700 mb-3 transition">
                         <div class="flex items-center space-x-4">
                             <div class="bg-blue-500/10 p-3 rounded-lg"><i class="far fa-file-image text-blue-400"></i></div>
                             <div>
                                 <p class="font-semibold text-sm">${d.file_name}</p>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span class="text-[9px] bg-slate-700 px-1 rounded text-slate-400 font-mono">
-                                        ${d.sha256_hash.substring(0,16)}...
-                                    </span>
-                                    ${d.ai_results ? `
-                                        <span class="text-[9px] bg-green-500/20 text-green-400 px-1 rounded border border-green-500/30">
-                                            AI: ${d.ai_results.count} Detected
-                                        </span>
-                                    ` : ''}
-                                </div>
+                                <p class="text-[10px] text-slate-500 font-mono">${d.sha256_hash.substring(0,16)}...</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
-                            <button onclick="viewQR('${d.qr_path || d.qr_url}')" class="text-[10px] text-blue-400 hover:text-white transition underline">Xem QR</button>
+                            <button onclick="viewQR('${d.qr_path || d.qr_url}')" class="text-[10px] text-blue-400 underline">Xem QR</button>
                             <span class="px-3 py-1 ${d.status === 'verified' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'} text-[9px] font-bold rounded-full uppercase border border-slate-700">
                                 ${d.status}
                             </span>
                         </div>
                     </div>
                 `).join('');
-            } catch (e) { console.error("Lỗi load tài liệu:", e); }
-        }
-    </script>
+            }
+        } catch (e) { console.error("Lỗi:", e); }
+    }
+
+    function viewQR(url) {
+        document.getElementById('qr-display').src = `http://127.0.0.1:8000${url}`;
+        document.getElementById('qr-modal').classList.remove('hidden');
+    }
+
+    function updateFileName() {
+        const input = document.getElementById('file-input');
+        if (input.files.length > 0) document.getElementById('file-name').innerText = input.files[0].name;
+    }
+
+    // Tự động load khi mở trang
+    window.onload = () => { if (token) loadDocuments(); };
+</script>
 </body>
 </html>

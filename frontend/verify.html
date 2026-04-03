@@ -1,0 +1,28 @@
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const docId = params.get('id');
+    const API_VERIFY = `http://192.168.100.236:8000/api/docs/verify/${docId}`;
+
+    fetch(API_VERIFY)
+        .then(res => {
+            if (!res.ok) throw new Error("Không tìm thấy dữ liệu");
+            return res.json();
+        })
+        .then(data => {
+            const isVerified = data.status === 'verified';
+            document.getElementById('content').innerHTML = `
+                <div class="${isVerified ? 'text-green-500' : 'text-yellow-500'} text-6xl mb-4">
+                    ${isVerified ? '✅' : '⚠️'}
+                </div>
+                <p class="font-bold text-xl uppercase">${isVerified ? 'Văn bản Chính chủ' : 'Đang chờ xác minh'}</p>
+                <div class="mt-4 text-left text-sm text-slate-400 space-y-1">
+                    <p><strong>File:</strong> ${data.file_name}</p>
+                    <p><strong>Hash:</strong> ${data.sha256_hash.substring(0,20)}...</p>
+                </div>
+            `;
+            document.getElementById('content').classList.remove('animate-pulse');
+        })
+        .catch(err => {
+            document.getElementById('content').innerHTML = `<p class="text-red-500">❌ Lỗi: ${err.message}</p>`;
+        });
+</script>
