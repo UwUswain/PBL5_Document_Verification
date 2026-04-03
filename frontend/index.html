@@ -118,35 +118,39 @@
         }
     }
 
-    async function uploadFile() {
-        const fileInput = document.getElementById('file-input');
-        if (!fileInput.files[0]) return alert("Chọn file đã bro!");
+async function uploadFile() {
+    const fileInput = document.getElementById('file-input');
+    if (!fileInput.files[0]) return alert("Chọn file đã bro!");
 
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
 
-        const res = await fetch(`${API_BASE}/docs/upload`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
-        });
+    const res = await fetch(`${API_BASE}/docs/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+    });
 
-        if (res.status === 401) return forceLogin(); // Nếu lỗi quyền, bắt login lại
+    if (res.status === 401) return forceLogin();
 
-        const data = await res.json();
-        if (data.qr_url) {
-            document.getElementById('qr-display').src = `http://127.0.0.1:8000${data.qr_url}`;
-            document.getElementById('qr-modal').classList.remove('hidden');
-            loadDocuments();
-        } else if (data.detail) {
-            alert(data.detail); // Hiện lỗi "File đã tồn tại" (400)
-        }
+    const data = await res.json();
+    
+    // CHỖ CẦN SỬA: Check data.qr_path thay vì qr_url
+    if (data.qr_path) {
+        // Dùng IP của máy bro để điện thoại load được ảnh QR
+        const backendIP = "192.168.100.236"; 
+        document.getElementById('qr-display').src = `http://${backendIP}:8000${data.qr_path}`;
+        document.getElementById('qr-modal').classList.remove('hidden');
+        loadDocuments();
+    } else if (data.detail) {
+        alert(data.detail); // Lỗi 400: Trùng file
     }
+}
 
     async function loadDocuments() {
         if (!token) return;
         try {
-            const res = await fetch(`${API_BASE}/docs/`, { 
+            const res = await fetch(`${API_BASE}/docs`, { 
                 headers: { 'Authorization': `Bearer ${token}` } 
             });
 
