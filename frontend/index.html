@@ -102,21 +102,39 @@
             }
         }
 
-        async function loadDocuments() {
-            const res = await fetch(`${API_BASE}/docs/`, { headers: { 'Authorization': `Bearer ${token}` } });
-            const docs = await res.json();
-            document.getElementById('doc-list').innerHTML = docs.reverse().map(d => `
-                <div class="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-700 rounded-xl hover:bg-slate-700 transition">
-                    <div class="flex items-center space-x-4">
-                        <div class="bg-blue-500/10 p-3 rounded-lg"><i class="far fa-file-image text-blue-400"></i></div>
-                        <div>
-                            <p class="font-semibold text-sm">${d.file_name}</p>
-                            <p class="text-[10px] text-slate-500 font-mono">${d.sha256_hash.substring(0,32)}...</p>
+async function loadDocuments() {
+            try {
+                const res = await fetch(`${API_BASE}/docs/`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const docs = await res.json();
+                
+                // Đảo ngược danh sách để cái mới nhất lên đầu
+                document.getElementById('doc-list').innerHTML = docs.reverse().map(d => `
+                    <div class="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-700 rounded-xl hover:bg-slate-700 transition mb-3">
+                        <div class="flex items-center space-x-4">
+                            <div class="bg-blue-500/10 p-3 rounded-lg"><i class="far fa-file-image text-blue-400"></i></div>
+                            <div>
+                                <p class="font-semibold text-sm">${d.file_name}</p>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-[9px] bg-slate-700 px-1 rounded text-slate-400 font-mono">
+                                        ${d.sha256_hash.substring(0,16)}...
+                                    </span>
+                                    ${d.ai_results ? `
+                                        <span class="text-[9px] bg-green-500/20 text-green-400 px-1 rounded border border-green-500/30">
+                                            AI: ${d.ai_results.count} Detected
+                                        </span>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="viewQR('${d.qr_path || d.qr_url}')" class="text-[10px] text-blue-400 hover:text-white transition underline">Xem QR</button>
+                            <span class="px-3 py-1 ${d.status === 'verified' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'} text-[9px] font-bold rounded-full uppercase border border-slate-700">
+                                ${d.status}
+                            </span>
                         </div>
                     </div>
-                    <span class="px-3 py-1 bg-yellow-500/10 text-yellow-500 text-[10px] font-bold rounded-full uppercase">${d.status}</span>
-                </div>
-            `).join('');
+                `).join('');
+            } catch (e) { console.error("Lỗi load tài liệu:", e); }
         }
     </script>
 </body>

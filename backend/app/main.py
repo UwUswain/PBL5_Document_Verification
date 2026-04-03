@@ -1,7 +1,8 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles 
-import os
 from contextlib import asynccontextmanager
 
 from app.core.config import get_settings
@@ -15,13 +16,23 @@ from app.modules.documents.router import router as doc_router
 # from app.modules.auth.router import router as auth_router
 # from app.modules.documents.router import router as doc_router
 
+
 settings = get_settings()
+
+# 1. Xác định đường dẫn gốc của folder backend
+# __file__ là path của main.py, đi ngược lên 2 cấp là tới folder backend/
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__)) # app/
+BASE_DIR = os.path.dirname(CURRENT_DIR) # backend/
+STORAGE_PATH = os.path.join(BASE_DIR, "storage")
+
+# 2. Tự động kiểm tra và tạo folder nếu chưa có (Tránh RuntimeError)
+os.makedirs(os.path.join(STORAGE_PATH, "uploads"), exist_ok=True)
+os.makedirs(os.path.join(STORAGE_PATH, "qrcodes"), exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f" {settings.APP_NAME} đang khởi động...")
-    # 2. MỞ RA KHI SẴN SÀNG: Để tự động tạo bảng khi server chạy
-    # await init_db() 
+    await init_db()
     yield
     await engine.dispose()
 
@@ -30,10 +41,9 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan
 )
-# 2.5 MOUNT STATIC FILES: Để giao diện có thể hiển thị ảnh
-# Đảm bảo đường dẫn "backend/storage" là đúng so với thư mục gốc Rebuild
-app.mount("/storage", StaticFiles(directory="backend/storage"), name="storage")
 
+# 3. Mount với đường dẫn tuyệt đối STORAGE_PATH vừa tính được
+app.mount("/storage", StaticFiles(directory=STORAGE_PATH), name="storage")
 # 3. MIDDLEWARE: Phải nằm TRƯỚC Router để xử lý quyền truy cập
 app.add_middleware(
     CORSMiddleware,
