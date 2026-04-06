@@ -10,8 +10,9 @@ from app.modules.documents.qr_logic import QRProcessor
 from app.shared.utils.hash_services import calculate_sha256
 from app.shared.utils.qr_services import generate_document_qr
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
+QR_DIR = os.path.join(BASE_DIR, "storage", "qrcodes")
 
 class DocumentService:
     @staticmethod
@@ -50,10 +51,11 @@ class DocumentService:
         
         db.add(new_doc)
         await db.flush() # Đẩy dữ liệu để lấy ID (UUID) từ DB
+        await db.refresh(new_doc) # Cập nhật lại instance với ID mới có được sau flush()
 
         # 6. Tạo QR Code: Link sẽ dẫn đến trang verify.html với query param là ID của document
         # Dùng IP của bro: 192.168.100.236 và cổng Live Server 5500
-        verify_url = f"http://192.168.100.236:5500/frontend/verify.html?id={new_doc.id}"
+        verify_url = f"http://10.19.92.116/:5500/frontend/verify.html?id={new_doc.id}"
         
         # Hàm generate_document_qr sẽ tạo ảnh QR chứa cái link verify_url này
         qr_url = await generate_document_qr(verify_url, str(new_doc.id))
