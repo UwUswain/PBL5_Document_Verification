@@ -4,20 +4,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, UploadFile
 
+# Import Models
 from app.modules.documents.models import Document
+
+# Import AI & Logic Services
 from app.modules.documents.ai_logic import SealDetector
-from app.modules.documents.qr_logic import QRProcessor
 from app.shared.utils.hash_services import calculate_sha256
 from app.shared.utils.qr_services import generate_document_qr
+from app.shared.utils.ocr_service import extract_text_from_image
+from app.shared.utils.ai_service import analyze_document_content
+from app.shared.utils.vector_service import add_document_to_vector_db
 
+# Cấu hình đường dẫn
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
-QR_DIR = os.path.join(BASE_DIR, "storage", "qrcodes")
 
 class DocumentService:
     @staticmethod
     async def process_upload(file: UploadFile, user_id, db: AsyncSession):
-        # 1. Đọc nội dung và tính Hash SHA-256
+        # 1. Đọc nội dung và tính Hash SHA-256 (Định danh vật lý)
         content = await file.read()
         file_hash = await calculate_sha256(content)
         
@@ -35,33 +40,54 @@ class DocumentService:
         async with aiofiles.open(file_path, "wb") as out_file:
             await out_file.write(content)
 
-        # 4. CHẠY AI: Lấy kết quả trước khi tạo bản ghi DB (BƯỚC QUAN TRỌNG)
-        # Phải có dòng này thì ai_data mới tồn tại để dùng ở bước sau
-        ai_data = await SealDetector.detect_stamps(file_path)
+        # --- BẮT ĐẦU CHUỖI XỬ LÝ AI (AI PIPELINE) ---
 
-        # 5. Khởi tạo Document và lưu ai_results
+        # Bước 4: Chạy AI nhận diện con dấu (Visual AI - YOLOv8)
+        # Đây là phần để thầy thấy bro xử lý "ảnh scan" thực thụ
+        seal_data = await SealDetector.detect_stamps(file_path)
+
+        # Bước 5: Chạy OCR trích xuất văn bản (Text Extraction)
+        raw_text = await extract_text_from_image(file_path)
+        
+        # Bước 6: Nhờ Gemini phân tích nội dung (Phân loại & Tóm tắt)
+        ai_analysis = await analyze_document_content(raw_text)
+        
+        # 4. Khởi tạo Document và lưu toàn bộ kết quả AI vào DB
         new_doc = Document(
             owner_id=user_id,
             file_name=file.filename,
             file_path=file_path,
             sha256_hash=file_hash,
-            ai_results=ai_data, # <--- ai_data đã có ở bước 4
-            status="verified" if ai_data.get("count", 0) > 0 else "pending"
+            # Lưu các trường AI mới
+            raw_text=raw_text,
+            category=ai_analysis.get("category", "Khác"),
+            summary=ai_analysis.get("summary", "Không có tóm tắt"),
+            ai_results=seal_data, 
+            # Status: Tự động Verified nếu đúng loại và có con dấu
+            status="verified" if (ai_analysis.get("category") != "Khác" and seal_data.get("count", 0) > 0) else "pending"
         )
         
         db.add(new_doc)
-        await db.flush() # Đẩy dữ liệu để lấy ID (UUID) từ DB
-        await db.refresh(new_doc) # Cập nhật lại instance với ID mới có được sau flush()
+        await db.flush() # Đẩy lên để lấy ID (UUID) phục vụ bước sau
 
-        # 6. Tạo QR Code: Link sẽ dẫn đến trang verify.html với query param là ID của document
-        # Dùng IP của bro: 192.168.100.236 và cổng Live Server 5500
-        verify_url = f"http://10.19.92.116/:5500/frontend/verify.html?id={new_doc.id}"
-        
-        # Hàm generate_document_qr sẽ tạo ảnh QR chứa cái link verify_url này
+        # Bước 7: Đẩy vào bộ nhớ Vector (Semantic Search)
+        # Giúp tìm kiếm nội dung "Tìm văn bản về đất đai" thay vì tìm đúng từ khóa
+        await add_document_to_vector_db(
+            doc_id=str(new_doc.id),
+            text=raw_text,
+            metadata={
+                "file_name": file.filename,
+                "category": new_doc.category
+            }
+        )
+
+        # Bước 8: Tạo QR Code chứng thực (Dùng IP của bro cho demo tại trường)
+        # Link dẫn đến trang verify của frontend
+        verify_url = f"http://192.168.100.236:5500/frontend/verify.html?id={new_doc.id}"
         qr_url = await generate_document_qr(verify_url, str(new_doc.id))
         new_doc.qr_path = qr_url
 
-        # 7. Commit toàn bộ thay đổi
+        # 9. Hoàn tất lưu trữ
         await db.commit()
         await db.refresh(new_doc)
         
