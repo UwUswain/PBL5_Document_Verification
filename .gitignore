@@ -32,6 +32,24 @@ dist/
 .vscode/
 
 # Ignore storage folders
-backend/storage/upload/*
-backend/storage/qrcode/*
+backend/storage/uploads/*
+backend/storage/qrcodes/*
 !backend/storage/.gitkeep
+
+# --- ADDITIONAL SECURITY & LOGS ---
+*.log
+.python-version
+.python-history
+
+# OS rác
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# AI Model Caches
+.cache/
+hub/
+
+# --- AI CACHE ---
+.cache/
+.ipynb_checkpoints/
