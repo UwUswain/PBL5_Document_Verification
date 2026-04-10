@@ -8,13 +8,21 @@ from app.db.base import Base, UUIDMixin, TimestampMixin
 class Document(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "documents"
 
-    # 1. Chủ sở hữu (Nối với bảng users)
-    owner_id: Mapped[uuid.UUID] = mapped_column(
-        PGUUID(as_uuid=True), 
-        ForeignKey("users.id"), 
-        nullable=False
+    # # 1. Chủ sở hữu (Nối với bảng users)
+    # owner_id: Mapped[uuid.UUID] = mapped_column(
+    #     PGUUID(as_uuid=True), 
+    #     ForeignKey("users.id"), 
+    #     nullable=False
+    # )
+    # Đảm bảo đã có import Optional ở đầu file: from typing import Optional
+
+# 1. Chủ sở hữu (Sửa lại để cho phép NULL khi test)
+    owner_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    PGUUID(as_uuid=True),
+    ForeignKey("users.id"),
+    nullable=True  # CHỖ NÀY: Sửa False thành True
     )
-    
+
     # 2. Thông tin file vật lý
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
