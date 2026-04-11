@@ -1,55 +1,68 @@
+# --- VIRTUAL ENVIRONMENTS (CHẶN TRIỆT ĐỂ) ---
+venv/
+.venv/
+env/
+venv310/
+venv*/
+bin/
+Include/
+Lib/
+Scripts/
+share/
+pyvenv.cfg
+
 # --- PYTHON / BACKEND ---
 __pycache__/
 *.py[cod]
 *$py.class
-venv/
-.venv/
-env/
-# Bỏ qua các file cấu hình mật
-.env
+.python-version
+.python-history
+*.log
 
-# --- AI / YOLO ---
-# Bỏ qua folder chứa kết quả huấn luyện và data nặng
+# --- BIẾN MÔI TRƯỜNG (BẢO MẬT) ---
+.env
+.env.example
+!.env.example
+
+# --- AI / YOLO / OCR ---
+# Chặn folder chạy YOLO và cache của các model AI
 backend/runs/
 backend/datasets/
-# Bỏ qua các file trọng số (model weights)
+.cache/
+hub/
+# Chặn các file model nặng (để thầy cài requirements tự tải sau)
 *.pt
 *.onnx
 *.engine
+*.pdparams
+*.pdmodel
+*.pdopt
+
+# --- STORAGE (DỮ LIỆU SINH RA KHI CHẠY) ---
+# Không nên đẩy ảnh upload hoặc QR lên Git
+backend/storage/uploads/*
+backend/storage/qrcodes/*
+backend/storage/processed/*
+# Giữ lại folder nhưng bỏ qua nội dung
+!backend/storage/.gitkeep
+!backend/storage/uploads/.gitkeep
+!backend/storage/qrcodes/.gitkeep
+!backend/storage/processed/.gitkeep
 
 # --- DATABASE ---
-# Nếu dùng SQLite (file .db), hãy chặn nó
 *.db
 *.sqlite3
 
-# --- FRONTEND (Node.js) ---
+# --- FRONTEND ---
 node_modules/
 dist/
 .DS_Store
 
-# --- OTHERS ---
+# --- IDE / OS RÁC ---
 .idea/
 .vscode/
-
-# Ignore storage folders
-backend/storage/uploads/*
-backend/storage/qrcodes/*
-!backend/storage/.gitkeep
-
-# --- ADDITIONAL SECURITY & LOGS ---
-*.log
-.python-version
-.python-history
-
-# OS rác
+*.swp
+*.bak
 Thumbs.db
 Desktop.ini
 .DS_Store
-
-# AI Model Caches
-.cache/
-hub/
-
-# --- AI CACHE ---
-.cache/
-.ipynb_checkpoints/

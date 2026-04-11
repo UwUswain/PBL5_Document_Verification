@@ -50,8 +50,7 @@ class DocumentService:
         raw_text = await extract_text_from_image(file_path)
         
         # Bước 6: Nhờ Gemini phân tích nội dung (Phân loại & Tóm tắt)
-        ai_analysis = await analyze_document_content(raw_text)
-        
+        ai_analysis = await analyze_document_content(raw_text, image_path=file_path)        
         # 4. Khởi tạo Document và lưu toàn bộ kết quả AI vào DB
         new_doc = Document(
             owner_id=user_id,
