@@ -1,0 +1,36 @@
+# --- BACKEND ---
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+python-multipart
+
+# --- DATABASE ---
+sqlalchemy
+asyncpg
+alembic
+
+# --- AI: OBJECT DETECTION ---
+ultralytics
+torch
+torchvision
+
+# --- OCR ---
+paddleocr
+paddlepaddle
+opencv-python-headless
+
+# --- LLM ---
+google-generativeai
+
+# --- AUTH ---
+python-jose
+passlib
+bcrypt
+email-validator
+
+# --- UTILITIES ---
+python-dotenv
+aiofiles
+requests
+qrcode

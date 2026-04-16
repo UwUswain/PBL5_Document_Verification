@@ -13,7 +13,7 @@ COLLECTION_NAME = "pbl5_documents"
 client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
 
 # 3. Sử dụng model Đa ngôn ngữ (Multilingual) 
-# Model này hiểu tiếng Việt cực tốt, hỗ trợ tìm kiếm theo ý nghĩa (Semantic Search)
+# Model này hiểu tiếng Việt cực tốt, hỗ trợ tìm kiếm theo ý nghĩa (Semantic Search) 
 embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="paraphrase-multilingual-MiniLM-L12-v2"
 )
