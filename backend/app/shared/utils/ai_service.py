@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import unicodedata
 import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
@@ -10,14 +11,20 @@ load_dotenv()
 # Cấu hình Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+def _init_model(name: str):
+    try:
+        return genai.GenerativeModel(name)
+    except Exception as e:
+        print(f"❌ Gemini model init error for '{name}': {e}")
+        return None
+
+
 # Model name có thể thay đổi theo thời gian; ưu tiên đọc từ env để dễ deploy
-_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-try:
-    model = genai.GenerativeModel(_MODEL_NAME)
-except Exception as e:
-    # Fallback an toàn để hệ thống không chết khi Google đổi tên model
-    print(f"❌ Gemini model init error for '{_MODEL_NAME}': {e}")
-    model = genai.GenerativeModel("gemini-flash-latest")
+_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip() or "gemini-flash-latest"
+_FALLBACK_MODEL_NAME = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-flash-latest").strip() or "gemini-flash-latest"
+
+model = _init_model(_MODEL_NAME) or _init_model("gemini-flash-latest")
+fallback_model = None if _FALLBACK_MODEL_NAME == _MODEL_NAME else _init_model(_FALLBACK_MODEL_NAME)
 
 def _extract_json_object(text: str) -> dict | None:
     if not text:
@@ -39,7 +46,18 @@ def _extract_json_object(text: str) -> dict | None:
     # Fallback: trích xuất object JSON đầu tiên
     json_match = re.search(r'\{[\s\S]*\}', text, re.DOTALL)
     if not json_match:
-        return None
+        # "Móc lốp": tìm { đầu tiên và } cuối cùng (trong trường hợp regex fail)
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx == -1 or end_idx == -1 or end_idx <= start_idx:
+            return None
+        json_str = text[start_idx : end_idx + 1]
+        try:
+            parsed = json.loads(json_str)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return None
     try:
         parsed = json.loads(json_match.group())
         if isinstance(parsed, dict):
@@ -57,9 +75,13 @@ def _response_to_text(response) -> str:
     if response is None:
         return ""
 
-    text = getattr(response, "text", None)
-    if isinstance(text, str) and text.strip():
-        return text.strip()
+    # `response.text` có thể raise nếu response không có valid Part (ví dụ bị safety block)
+    try:
+        text = response.text
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    except Exception:
+        pass
 
     # Fallback: candidates[0].content.parts[].text
     candidates = getattr(response, "candidates", None)
@@ -73,6 +95,193 @@ def _response_to_text(response) -> str:
         return ""
 
 
+def _response_is_blocked(response) -> bool:
+    """
+    Heuristic: có candidates nhưng không có content parts -> thường do safety filter block.
+    """
+    if response is None:
+        return False
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return False
+    try:
+        content = getattr(candidates[0], "content", None)
+        parts = getattr(content, "parts", None)
+        return not parts
+    except Exception:
+        return True
+
+
+def _get_safety_ratings(response):
+    candidates = getattr(response, "candidates", None) or []
+    try:
+        return getattr(candidates[0], "safety_ratings", None)
+    except Exception:
+        return None
+
+
+def _finish_reason_is_safety(response) -> bool:
+    """
+    SDK thường dùng finish_reason==3 để báo SAFETY (blocked).
+    (Giữ check này độc lập với "parts is None" để bắt thêm case).
+    """
+    if response is None:
+        return False
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return False
+    try:
+        return getattr(candidates[0], "finish_reason", None) == 3
+    except Exception:
+        return False
+
+
+def _normalize_vi(text: str) -> str:
+    """
+    Normalize tiếng Việt để match keyword ổn định khi OCR không dấu:
+    - lower
+    - bỏ dấu (NFKD)
+    - thay ký tự không phải chữ/số thành khoảng trắng
+    - gộp khoảng trắng
+    """
+    if not text:
+        return ""
+    text = text.lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join([c for c in text if not unicodedata.combining(c)])
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _guess_category_from_text(text: str) -> str:
+    t = _normalize_vi(text)
+    # bắt cả dạng có khoảng trắng và dính liền
+    if ("cong van" in t) or ("congvan" in t):
+        return "Công văn"
+    if ("quyet dinh" in t) or ("quyetdinh" in t):
+        return "Quyết định"
+    if ("hop dong" in t) or ("hopdong" in t):
+        return "Hợp đồng"
+    # "don" cực dễ match nhầm trong cụm "don vi" (đơn vị), nên chỉ bắt pattern rõ ràng
+    if (
+        ("don xin" in t)
+        or ("don de nghi" in t)
+        or ("don khieu nai" in t)
+        or ("don to cao" in t)
+        or ("don tu" in t)
+        or ("kinh de nghi" in t and "don" in t)
+    ):
+        return "Đơn từ"
+    return "Khác"
+
+
+def _rule_based_summary(raw_text: str, *, max_lines: int = 5) -> str:
+    """
+    Tóm tắt rule-based từ OCR text để UI nhìn "đẹp" khi Gemini lỗi/không trả JSON.
+    Chiến lược:
+    - Tách câu theo dấu câu phổ biến (., ;, :, xuống dòng)
+    - Ưu tiên câu chứa keyword hành chính (V/v, Kính gửi, Căn cứ, Đề nghị, Quyết định, Thông báo...)
+    - Ghép 3-5 dòng ngắn, tránh câu quá dài/ngắn
+    """
+    if not raw_text:
+        return "Không có tóm tắt"
+
+    text = re.sub(r"\s+", " ", raw_text).strip()
+    if not text:
+        return "Không có tóm tắt"
+
+    # Sentence-ish split (OCR hay dính chữ, nên split rộng)
+    chunks = [c.strip(" -\t") for c in re.split(r"[\n\r]+|[.;:]+", text) if c and c.strip()]
+    if not chunks:
+        return (text[:280] + ("..." if len(text) > 280 else "")).strip()
+
+    norm_text = _normalize_vi(text)
+    # keyword không dấu để match ổn định
+    keywords = [
+        "v v",
+        "vv",
+        "kinh gui",
+        "can cu",
+        "de nghi",
+        "quyet dinh",
+        "thong bao",
+        "ve viec",
+        "noi dung",
+    ]
+
+    def score_chunk(c: str) -> int:
+        n = _normalize_vi(c)
+        s = 0
+        for kw in keywords:
+            if kw in n:
+                s += 3
+        # boost nếu chunk nằm gần đầu văn bản (thường là tiêu đề/nội dung chính)
+        pos = norm_text.find(_normalize_vi(c))
+        if pos != -1 and pos < 400:
+            s += 2
+        # phạt câu quá ngắn/quá dài
+        if len(c) < 25:
+            s -= 2
+        if len(c) > 220:
+            s -= 1
+        return s
+
+    ranked = sorted(chunks, key=score_chunk, reverse=True)
+
+    picked: list[str] = []
+    seen_norm: set[str] = set()
+    for c in ranked:
+        if len(picked) >= max_lines:
+            break
+        if len(c) < 25:
+            continue
+        # normalize để tránh chọn trùng ý do OCR lặp
+        n = _normalize_vi(c)
+        if not n or n in seen_norm:
+            continue
+        seen_norm.add(n)
+        picked.append(c)
+
+    # Nếu không đủ câu keyword, lấy thêm vài câu đầu cho đủ 3 dòng
+    if len(picked) < 3:
+        for c in chunks:
+            if len(picked) >= 3:
+                break
+            if len(c) < 25:
+                continue
+            n = _normalize_vi(c)
+            if not n or n in seen_norm:
+                continue
+            seen_norm.add(n)
+            picked.append(c)
+
+    if not picked:
+        return (text[:280] + ("..." if len(text) > 280 else "")).strip()
+
+    # Format 3-5 dòng
+    picked = picked[:max_lines]
+    return "\n".join(picked)
+
+
+def _is_complete_json_object(text: str) -> bool:
+    if not text:
+        return False
+    t = text.strip()
+    return t.startswith("{") and t.endswith("}")
+
+
+def _looks_like_json_fragment(text: str) -> bool:
+    """
+    Detect JSON fragment / broken JSON to avoid using it as summary.
+    """
+    if not text:
+        return False
+    t = text.strip().lower()
+    if t.startswith("{") and not t.endswith("}"):
+        return True
+    return ('"category"' in t) or ('"summary"' in t)
+
+
 async def analyze_document_content(raw_text: str, image_path: str = None) -> dict:
     """Phân loại và tóm tắt văn bản (Có fallback Vision)"""
     
@@ -81,52 +290,52 @@ async def analyze_document_content(raw_text: str, image_path: str = None) -> dic
     if not is_text_valid and not image_path:
         return {"category": "Khác", "summary": "Không đủ dữ liệu để AI phân tích nội dung."}
 
-    prompt = """
-Bạn là hệ thống trích xuất thông tin từ văn bản hành chính Việt Nam.
+    prompt_template = """
+Chỉ trả về DUY NHẤT một JSON object hợp lệ.
+KHÔNG chào hỏi. KHÔNG giải thích. KHÔNG markdown.
+Output BẮT BUỘC bắt đầu bằng ký tự '{' và kết thúc bằng ký tự '}'.
 
-NHIỆM VỤ:
-- Phân loại đúng 1 trong các nhóm: "Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác".
-- Tóm tắt nội dung chính 3-5 dòng, rõ ràng, tiếng Việt.
-
-RÀNG BUỘC ĐẦU RA (BẮT BUỘC):
-- Chỉ được trả về 1 JSON object duy nhất, KHÔNG markdown, KHÔNG giải thích.
-- JSON phải có đúng 2 key: "category" và "summary".
-- "category" phải là một trong 5 giá trị cho phép ở trên.
-
-VÍ DỤ (few-shot):
-Input:
-"CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM... QUYẾT ĐỊNH. V/v bổ nhiệm ông Nguyễn Văn A giữ chức..."
-Output:
-{"category":"Quyết định","summary":"Văn bản là quyết định về việc bổ nhiệm nhân sự.\nNêu rõ họ tên người được bổ nhiệm và chức vụ.\nQuy định hiệu lực và trách nhiệm thi hành."}
-
-Input:
-"HỢP ĐỒNG DỊCH VỤ... Bên A... Bên B... Điều 1: Phạm vi công việc... Điều 2: Giá trị hợp đồng..."
-Output:
-{"category":"Hợp đồng","summary":"Hợp đồng dịch vụ giữa các bên A và B.\nQuy định phạm vi công việc, thời hạn, và nghĩa vụ các bên.\nNêu giá trị hợp đồng, phương thức thanh toán và điều khoản chung."}
-
-Input:
-"Kính gửi: ... V/v đề nghị cung cấp hồ sơ... Căn cứ... Đề nghị quý đơn vị phối hợp..."
-Output:
-{"category":"Công văn","summary":"Công văn gửi cơ quan/đơn vị liên quan về việc đề nghị cung cấp/ phối hợp xử lý hồ sơ.\nNêu căn cứ, nội dung đề nghị và thời hạn phản hồi.\nThông tin liên hệ và trách nhiệm thực hiện."}
-
-Giờ hãy trả JSON cho Input dưới đây.
-"""
+Schema:
+{"category":"Quyết định|Hợp đồng|Công văn|Đơn từ|Khác","summary":"tóm tắt 3-5 dòng tiếng Việt"}
+""".strip()
 
     try:
         # Nếu OCR fail nhưng có ảnh, dùng Vision để "cứu"
-        if image_path and os.path.exists(image_path) and not is_text_valid:
+        is_vision = bool(image_path and os.path.exists(image_path) and not is_text_valid)
+        payload = None
+        if is_vision:
             img = Image.open(image_path)
-            response = model.generate_content(
-                [prompt, img],
-                generation_config={"temperature": 0.2, "max_output_tokens": 256, "response_mime_type": "application/json"},
-            )
+            payload = [prompt_template, img]
         else:
-            response = model.generate_content(
-                [prompt, raw_text],
+            # Nhúng thẳng text vào prompt để ép format ổn định hơn
+            content = (raw_text or "").strip()
+            prompt = f"""{prompt_template}
+
+VĂN BẢN CẦN PHÂN TÍCH:
+{content[:3000]}
+"""
+            payload = prompt
+
+        response = model.generate_content(
+            payload,
+            generation_config={
+                "temperature": 0.0,
+                "max_output_tokens": 800,
+                "top_p": 0.8,
+            },
+        )
+
+        # Nếu bị safety block -> thử fallback model (nếu có)
+        if (fallback_model is not None) and (_response_is_blocked(response) or _finish_reason_is_safety(response)):
+            response = fallback_model.generate_content(
+                payload,
                 generation_config={"temperature": 0.2, "max_output_tokens": 256, "response_mime_type": "application/json"},
             )
 
-        parsed = _extract_json_object(_response_to_text(response))
+        raw_out = _response_to_text(response)
+        if os.getenv("GEMINI_DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}:
+            print(f"🧠 Gemini RAW (first 300 chars): {raw_out[:300]!r}")
+        parsed = _extract_json_object(raw_out) if _is_complete_json_object(raw_out) else None
         if parsed:
             # Guardrails: normalize/validate minimal schema
             category = parsed.get("category", "Khác")
@@ -134,7 +343,63 @@ Giờ hãy trả JSON cho Input dưới đây.
                 category = "Khác"
             summary = parsed.get("summary") or "Không có tóm tắt"
             return {"category": category, "summary": str(summary).strip()}
-        
+
+        if _response_is_blocked(response) or _finish_reason_is_safety(response):
+            ratings = _get_safety_ratings(response)
+            print(f"⚠️ Gemini response blocked by safety. safety_ratings={ratings}")
+            return {
+                "category": "Khác",
+                "summary": "AI bị chặn (safety filter). Hãy thử lại hoặc đổi model/cấu hình Gemini.",
+            }
+
+        # Nếu model trả ra text nhưng không đúng JSON -> thử 1 lần "repair" để ép về JSON.
+        # Lưu ý: nếu raw_out chỉ là câu xã giao (không có '{'), repair nên làm trên raw_text gốc.
+        if raw_out and not parsed:
+            repair_input = raw_out if ("{" in raw_out and "}" in raw_out) else (raw_text or "")
+            repair_prompt = (
+                "Trả về DUY NHẤT 1 JSON object, KHÔNG markdown, KHÔNG giải thích.\n"
+                'Schema bắt buộc: {"category":"...","summary":"..."}\n'
+                "category chỉ được là một trong: Quyết định, Hợp đồng, Công văn, Đơn từ, Khác.\n"
+                "summary: 3-5 dòng tiếng Việt, ngắn gọn.\n\n"
+                f"Văn bản cần phân tích:\n{(repair_input or '')[:3000]}"
+            )
+            try:
+                repair_resp = model.generate_content(
+                    repair_prompt,
+                    generation_config={
+                        "temperature": 0.0,
+                        "max_output_tokens": 500,
+                        "top_p": 0.8,
+                    },
+                )
+                repair_out = _response_to_text(repair_resp)
+                if os.getenv("GEMINI_DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}:
+                    print(f"🧠 Gemini REPAIR RAW (first 300 chars): {repair_out[:300]!r}")
+                repaired = _extract_json_object(repair_out) if _is_complete_json_object(repair_out) else None
+                if repaired:
+                    category = repaired.get("category", "Khác")
+                    if category not in ["Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác"]:
+                        category = "Khác"
+                    summary = repaired.get("summary") or "Không có tóm tắt"
+                    return {"category": category, "summary": str(summary).strip()}
+            except Exception as e:
+                print(f"⚠️ Gemini repair error: {e}")
+
+            # Nếu repair vẫn fail -> fallback đoán category + cắt summary để không trả rỗng
+            guessed = _guess_category_from_text(raw_text or raw_out or "")
+            # summary ưu tiên lấy từ raw_out nếu có nội dung khác câu xã giao
+            summary_src = (
+                raw_out
+                if (
+                    raw_out
+                    and len(raw_out.strip()) > 30
+                    and "here is" not in raw_out.lower()
+                    and not _looks_like_json_fragment(raw_out)
+                )
+                else (raw_text or "")
+            )
+            return {"category": guessed, "summary": _rule_based_summary(summary_src)}
+
         return {"category": "Khác", "summary": "Nội dung đã được lưu, AI trả về định dạng không chuẩn."}
 
     except Exception as e:
@@ -145,7 +410,7 @@ async def call_gemini_pure_text(prompt: str) -> str:
     """Hàm chỉ lấy text thô từ Gemini (Phục vụ AI Search)"""
     try:
         response = model.generate_content(prompt)
-        return response.text.strip()
+        return _response_to_text(response)
     except Exception as e:
         print(f"❌ Gemini Pure Text Error: {e}")
         return ""
