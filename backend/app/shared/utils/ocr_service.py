@@ -22,6 +22,43 @@ def get_ocr_model():
     return _ocr_instance
 
 
+def _preprocess_for_ocr(img):
+    """
+    Preprocess ảnh trước OCR:
+    - grayscale để giảm nhiễu màu
+    - resize theo cạnh dài mục tiêu để OCR ổn định/tối ưu tốc độ
+    """
+    if img is None:
+        return None
+
+    # Grayscale
+    if len(img.shape) == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img
+
+    h, w = gray.shape[:2]
+    if h == 0 or w == 0:
+        return None
+
+    long_edge = max(h, w)
+    target_long_edge = 1600  # đủ chi tiết cho văn bản hành chính, vẫn nhanh
+
+    # Chỉ resize khi quá lớn/quá nhỏ để giữ chất lượng + tốc độ
+    if long_edge > 2200:
+        scale = target_long_edge / float(long_edge)
+        new_w = max(1, int(w * scale))
+        new_h = max(1, int(h * scale))
+        gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    elif long_edge < 900:
+        scale = 1100 / float(long_edge)
+        new_w = max(1, int(w * scale))
+        new_h = max(1, int(h * scale))
+        gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+    return gray
+
+
 async def extract_text_from_image(image_path: str) -> str:
     try:
         if not os.path.exists(image_path):
@@ -33,7 +70,12 @@ async def extract_text_from_image(image_path: str) -> str:
             print("❌ Không đọc được ảnh")
             return ""
 
-        # ✅ OCR trực tiếp ảnh màu (KHÔNG grayscale)
+        # ✅ Preprocess trước khi đưa vào PaddleOCR (grayscale + resize)
+        img = _preprocess_for_ocr(img)
+        if img is None:
+            print("❌ Ảnh không hợp lệ sau preprocess")
+            return ""
+
         model = get_ocr_model()
         result = model.ocr(img)
 

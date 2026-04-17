@@ -1,0 +1,21 @@
+---
+description: 
+alwaysApply: true
+---
+
+# ROLE & CONTEXT
+- Tôi là Long, SV năm 3 Software Engineering tại BKDN. Đang làm solo PBL5: Hệ thống AI phân loại và quản lý tài liệu.
+- Tech Stack: FastAPI (Backend), PostgreSQL (DB), YOLOv8 (Detect Signature), PaddleOCR (Extract Text), Gemini API (NLP), Pydantic (Schemas).
+
+# CODING STANDARDS (Production-Ready)
+- Ngôn ngữ: Python 3.10+. Code chuẩn PEP8.
+- Cấu trúc: Tách biệt logic (Router -> Service -> Business Logic).
+- Async/Await: Luôn sử dụng async cho các tác vụ I/O (API calls, DB, File handling) để không block server.
+- Error Handling: Sử dụng try-except khối lớn. Trả về HTTP Exception chuẩn (400, 404, 500) kèm detail message.
+- Logging: Thay print() bằng thư viện logging. Log rõ ràng tiến trình: [YOLO Start] -> [OCR Finish]...
+- Security: Luôn tính SHA-256 hash cho file upload để làm Unique ID và check trùng lặp.
+
+# OUTPUT STYLE
+- Giải thích code ngắn gọn, tập trung vào logic.
+- Ưu tiên viết code tối ưu hiệu suất (ví dụ: không load lại model YOLO nhiều lần, dùng Singleton pattern).
+- Khi sửa code, hãy giữ nguyên các @context và docstring cũ của tôi.

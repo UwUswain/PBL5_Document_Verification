@@ -1,132 +1,216 @@
 import os
+import re
 import aiofiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, case
 from fastapi import HTTPException, UploadFile
+from urllib.parse import urlencode
 
-# Import Models
 from app.modules.documents.models import Document
-
-# Import AI & Logic Services
 from app.modules.documents.ai_logic import SealDetector
 from app.shared.utils.hash_services import calculate_sha256
 from app.shared.utils.qr_services import generate_document_qr
 from app.shared.utils.ocr_service import extract_text_from_image
 from app.shared.utils.ai_service import analyze_document_content
 
-# Cấu hình đường dẫn
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
 
 class DocumentService:
     @staticmethod
+    def _build_verify_url(document_id) -> str:
+        """
+        Frontend verify page URL (configurable via env).
+        Example: FRONTEND_VERIFY_URL=http://localhost:5500/frontend/verify.html
+        """
+        base = os.getenv("FRONTEND_VERIFY_URL", "http://localhost:5500/frontend/verify.html").strip()
+        if not base:
+            base = "http://localhost:5500/frontend/verify.html"
+        joiner = "&" if "?" in base else "?"
+        return f"{base}{joiner}{urlencode({'id': str(document_id)})}"
+
+    @staticmethod
     async def process_upload(file: UploadFile, user_id, db: AsyncSession):
-        # 1. Đọc nội dung và tính Hash SHA-256
+        # Backward-compatible entrypoint
+        return await DocumentService.create_document_pipeline(file=file, user_id=user_id, db=db)
+
+    @staticmethod
+    async def create_document_pipeline(file: UploadFile, user_id, db: AsyncSession):
+        """
+        Pipeline chuẩn:
+        Nhận file -> Hash -> Lưu Disk -> YOLO detect -> OCR -> Gemini Summary (Vision nếu OCR rỗng) -> Lưu DB
+        """
+        # 1) Nhận file bytes
         content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="File rỗng hoặc không đọc được.")
+
+        # 2) Hash
         file_hash = await calculate_sha256(content)
-        
-        # 2. Kiểm tra trùng lặp
-        query = select(Document).where(Document.sha256_hash == file_hash)
-        result = await db.execute(query)
+
+        # 3) Chống trùng trong DB
+        result = await db.execute(select(Document).where(Document.sha256_hash == file_hash))
         if result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="File này đã tồn tại trên hệ thống!")
+            raise HTTPException(status_code=400, detail="Văn bản này đã tồn tại trên hệ thống!")
 
-        # 3. Lưu file vật lý
+        # 4) Lưu disk
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        file_ext = os.path.splitext(file.filename)[1]
-        file_path = os.path.join(UPLOAD_DIR, f"{file_hash}{file_ext}")
-        
-        async with aiofiles.open(file_path, "wb") as out_file:
-            await out_file.write(content)
+        ext = os.path.splitext(file.filename or "")[1]
+        file_path = os.path.join(UPLOAD_DIR, f"{file_hash}{ext}")
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(content)
 
-        # --- AI PIPELINE ---
+        # 5) YOLO detect
+        try:
+            seal_data = await SealDetector.detect_stamps(file_path)
+        except Exception:
+            seal_data = {"status": "error", "count": 0, "entities": []}
 
-        # Bước 4: Nhận diện con dấu (YOLOv8)
-        seal_data = await SealDetector.detect_stamps(file_path)
+        # 6) OCR
+        try:
+            extracted_text = await extract_text_from_image(file_path)
+        except Exception:
+            extracted_text = ""
+        extracted_text = (extracted_text or "").strip()
 
-        # Bước 5: Trích xuất văn bản (OCR)
-        raw_text = await extract_text_from_image(file_path)
-        
-        # Bước 6: Gemini phân tích (Phân loại & Tóm tắt)
-        ai_analysis = await analyze_document_content(raw_text, image_path=file_path)        
-        
-        # 4. Lưu vào Database
+        # 7) Gemini summary
+        # Nếu OCR rỗng -> ép Gemini dùng Vision bằng cách truyền raw_text=""
+        try:
+            ai_analysis = await analyze_document_content(
+                extracted_text if extracted_text else "",
+                image_path=file_path,
+            )
+        except Exception:
+            ai_analysis = {"category": "Khác", "summary": "Hệ thống đang bận phân tích."}
+
+        # 8) Chuẩn hoá raw_text lưu DB (giữ thông tin OCR fail để trace)
+        raw_text_for_db = extracted_text if extracted_text else "Không trích xuất được nội dung rõ ràng từ ảnh quét."
+
+        # 9) Status logic
+        status = "verified" if (
+            len(extracted_text) > 20
+            and ai_analysis.get("category") != "Khác"
+            and seal_data.get("count", 0) > 0
+        ) else "pending"
+
+        # 10) Lưu DB
         new_doc = Document(
             owner_id=user_id,
             file_name=file.filename,
             file_path=file_path,
             sha256_hash=file_hash,
-            raw_text=raw_text,
+            raw_text=raw_text_for_db,
             category=ai_analysis.get("category", "Khác"),
             summary=ai_analysis.get("summary", "Không có tóm tắt"),
-            ai_results=seal_data, 
-            status="verified" if (ai_analysis.get("category") != "Khác" and seal_data.get("count", 0) > 0) else "pending"
+            ai_results=seal_data,
+            status=status,
         )
-        
         db.add(new_doc)
-        await db.flush() 
+        await db.flush()
 
-        # --- BƯỚC 7 (CHROMA DB) ĐÃ BỊ LOẠI BỎ ---
+        # 11) QR Code
+        verify_url = DocumentService._build_verify_url(new_doc.id)
+        new_doc.qr_path = await generate_document_qr(verify_url, str(new_doc.id))
 
-        # Bước 8: Tạo QR Code (Dùng IP tĩnh của ông để demo)
-        verify_url = f"http://192.168.100.236:5500/frontend/verify.html?id={new_doc.id}"
-        qr_url = await generate_document_qr(verify_url, str(new_doc.id))
-        new_doc.qr_path = qr_url
-
-        # 9. Hoàn tất
         await db.commit()
         await db.refresh(new_doc)
-        
         return new_doc
 
     @staticmethod
     async def ai_semantic_search(query: str, db: AsyncSession):
-        """
-        Thay thế ChromaDB bằng cách dùng Gemini để Reranking dựa trên Summary.
-        """
-        # 1. Lấy danh sách 20 văn bản gần nhất để Gemini phân tích
+        """Tìm kiếm thông minh dùng Gemini Reranking trên 20 bản ghi mới nhất"""
         result = await db.execute(select(Document).order_by(Document.created_at.desc()).limit(20))
         docs = result.scalars().all()
-        
+        if not docs: return []
+
+        context = "\n".join([f"ID: {d.id} | Summary: {d.summary}" for d in docs])
+        prompt = f"Danh sách:\n{context}\n\nTìm UUID liên quan nhất đến: '{query}'. Trả về danh sách UUID cách nhau bởi dấu phẩy. Nếu không có, trả về 'None'."
+
+        try:
+            from app.shared.utils.ai_service import call_gemini_pure_text
+            raw_res = await call_gemini_pure_text(prompt)
+            if "None" in raw_res or not raw_res: return []
+
+            # ✅ FIX: Dùng Regex tìm UUID chuẩn để tránh lỗi split
+            target_ids = re.findall(r'[0-9a-fA-F\-]{36}', raw_res)
+            if not target_ids: return []
+
+            final_res = await db.execute(select(Document).where(Document.id.in_(target_ids)))
+            return final_res.scalars().all()
+        except Exception as e:
+            print(f"❌ Search Error: {e}")
+            # Fallback về search LIKE
+            res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")))
+            return res.scalars().all()
+
+    @staticmethod
+    async def list_my_documents(
+        db: AsyncSession,
+        owner_id,
+        *,
+        limit: int,
+        offset: int,
+    ):
+        total = await db.scalar(select(func.count()).select_from(Document).where(Document.owner_id == owner_id))
+
+        result = await db.execute(
+            select(Document)
+            .where(Document.owner_id == owner_id)
+            .order_by(Document.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return (total or 0), result.scalars().all()
+
+    @staticmethod
+    async def ai_semantic_search_for_user(
+        query: str,
+        db: AsyncSession,
+        *,
+        owner_id,
+        candidate_limit: int = 50,
+    ):
+        """
+        AI rerank trong phạm vi tài liệu của user (tránh leak + tối ưu SQL).
+        """
+        result = await db.execute(
+            select(Document)
+            .where(Document.owner_id == owner_id)
+            .order_by(Document.created_at.desc())
+            .limit(candidate_limit)
+        )
+        docs = result.scalars().all()
         if not docs:
             return []
 
-        # 2. Chuẩn bị dữ liệu cho Gemini
-        # Gom danh sách: ID - Tên file - Tóm tắt
-        context_list = [f"ID: {d.id} | File: {d.file_name} | Summary: {d.summary}" for d in docs]
-        context_text = "\n".join(context_list)
-
-        # 3. Prompt gửi cho Gemini
-        prompt = f"""
-        Bạn là trợ lý tìm kiếm văn bản thông minh. 
-        Dưới đây là danh sách tóm tắt của các văn bản trong hệ thống:
-        {context_text}
-
-        Người dùng đang tìm kiếm với từ khóa/ý định: "{query}"
-
-        Hãy chọn ra tối đa 5 văn bản phù hợp nhất. 
-        Chỉ trả về danh sách UUID của các văn bản, cách nhau bởi dấu phẩy. 
-        Nếu không có cái nào liên quan, hãy trả về 'None'.
-        """
+        context = "\n".join([f"ID: {d.id} | Summary: {d.summary}" for d in docs])
+        prompt = (
+            f"Danh sách:\n{context}\n\n"
+            f"Tìm UUID liên quan nhất đến: '{query}'. "
+            "Trả về danh sách UUID cách nhau bởi dấu phẩy. Nếu không có, trả về 'None'."
+        )
 
         try:
-            # Gọi hàm Gemini (hàm này ông đã viết trong shared/utils/ai_service.py)
-            # Giả sử hàm đó tên là call_gemini_pure_text
             from app.shared.utils.ai_service import call_gemini_pure_text
-            raw_response = await call_gemini_pure_text(prompt)
-            
-            if "None" in raw_response or not raw_response:
+
+            raw_res = await call_gemini_pure_text(prompt)
+            if not raw_res or "None" in raw_res:
                 return []
 
-            # 4. Trích xuất ID và lấy dữ liệu thật từ DB
-            target_ids = [id.strip() for id in raw_response.split(",")]
-            final_query = select(Document).where(Document.id.in_(target_ids))
-            final_result = await db.execute(final_query)
-            
-            return final_result.scalars().all()
+            target_ids = re.findall(r"[0-9a-fA-F\-]{36}", raw_res)
+            if not target_ids:
+                return []
+
+            ordering = case({tid: idx for idx, tid in enumerate(target_ids)}, value=Document.id)
+            final_res = await db.execute(
+                select(Document)
+                .where(Document.owner_id == owner_id, Document.id.in_(target_ids))
+                .order_by(ordering)
+            )
+            return final_res.scalars().all()
         except Exception as e:
-            print(f"❌ Lỗi AI Search: {e}")
-            # Fallback về tìm kiếm theo tên file nếu AI lỗi
-            fallback_query = select(Document).where(Document.file_name.ilike(f"%{query}%"))
-            res = await db.execute(fallback_query)
+            print(f"❌ Search Error: {e}")
+            res = await db.execute(
+                select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%"))
+            )
             return res.scalars().all()

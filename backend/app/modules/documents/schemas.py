@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 class DocumentOut(BaseModel):
     id: UUID
@@ -14,3 +14,14 @@ class DocumentOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PageMeta(BaseModel):
+    limit: int
+    offset: int
+    total: int
+
+
+class DocumentPageOut(BaseModel):
+    items: List[DocumentOut]
+    meta: PageMeta
