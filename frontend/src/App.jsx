@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { Search, BarChart3, Trash2, FolderOpen } from "lucide-react" // Thêm icon cho demo
 import { Sidebar } from "./components/dashboard/Sidebar";
 import { Header } from "./components/dashboard/Header";
 import { StatsCards } from "./components/dashboard/StatsCards";
@@ -11,10 +12,10 @@ import { docService } from "./services/api";
 const mockDocuments = [
   {
     id: "1",
-    file_name: "QD_2024_001.pdf",
+    file_name: "He_thong_dang_ket_noi.pdf",
     category: "decision",
-    status: "verified",
-    summary: "Dữ liệu mẫu (Backend đang kết nối...)",
+    status: "pending",
+    summary: "Đang tải dữ liệu thực tế từ Database...",
     ai_results: { entities: [] },
     created_at: new Date().toISOString(),
   }
@@ -29,40 +30,44 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  const stats = {
+  // 1. Tính toán thống kê
+  const stats = useMemo(() => ({
     total: documents.length,
     verified: documents.filter((d) => d.status === "verified").length,
     pending: documents.filter((d) => d.status === "pending").length,
-  }
+  }), [documents]);
 
-  // Tải dữ liệu từ Backend
+  // 2. Lọc tài liệu theo thanh tìm kiếm
+  const filteredDocuments = documents.filter(doc => 
+    doc.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    doc.category?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const loadDocuments = useCallback(async () => {
     setIsLoading(true)
     try {
       const res = await docService.getDocs()
-      // Xử lý linh hoạt nếu backend trả về list hoặc object chứa items
-      const data = Array.isArray(res.data) ? res.data : (res.data.items || []);
+      // BACKEND trả về dạng { items: [...] }, nên phải lấy res.data.items
+      const data = res.data.items || [];
+      console.log("Dữ liệu thật từ Back:", data);
       setDocuments([...data].reverse())
     } catch (error) {
-      console.error("Lỗi lấy dữ liệu:", error)
+      console.error("Lỗi API:", error);
       if (error.response?.status === 401) {
-        handleLogout(); // Token hết hạn hoặc sai, bắt đăng nhập lại
+        handleLogout();
       } else {
-        setDocuments(mockDocuments)
+        setDocuments(mockDocuments) // Chỉ hiện mock khi sập mạng
       }
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // KIỂM TRA TRẠNG THÁI ĐĂNG NHẬP KHI MỞ APP
   useEffect(() => {
     const token = localStorage.getItem("pbl5_token");
     if (token) {
       setIsAuthenticated(true);
       loadDocuments();
-    } else {
-      setIsAuthenticated(false);
     }
   }, [loadDocuments])
 
@@ -72,8 +77,8 @@ export default function App() {
       setIsAuthenticated(true);
       loadDocuments();
     } catch (err) {
-      alert("Đăng nhập thất bại! Vui lòng kiểm tra lại tài khoản.");
-      throw err; // Để LoginForm hiển thị lỗi
+      alert("Đăng nhập thất bại! Kiểm tra lại tài khoản.");
+      throw err;
     }
   }
 
@@ -89,7 +94,7 @@ export default function App() {
       await docService.upload(file)
       await loadDocuments()
     } catch (e) {
-      alert("Lỗi upload! Có thể do Token hết hạn hoặc file sai định dạng.")
+      alert("Lỗi upload!")
     } finally {
       setIsLoading(false)
     }
@@ -100,13 +105,59 @@ export default function App() {
     setIsDrawerOpen(true)
   }
 
+  // 3. LOGIC RENDER NỘI DUNG CHÍNH (Dùng để demo đa tính năng)
+  const renderMainContent = () => {
+    switch (activeNav) {
+      case "overview":
+        return (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <StatsCards stats={stats} />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="lg:col-span-8">
+                <DocumentTable
+                  documents={filteredDocuments}
+                  onDocumentClick={handleDocumentClick}
+                  onRefresh={loadDocuments}
+                  isLoading={isLoading}
+                />
+              </div>
+              <div className="lg:col-span-4">
+                <UploadSection onUpload={handleUpload} />
+              </div>
+            </div>
+          </div>
+        );
+      case "documents":
+        return (
+          <div className="animate-in slide-in-from-bottom-4 duration-500">
+             <DocumentTable
+                documents={filteredDocuments}
+                onDocumentClick={handleDocumentClick}
+                onRefresh={loadDocuments}
+                isLoading={isLoading}
+              />
+          </div>
+        );
+      default:
+        return (
+          <div className="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white p-12 text-center">
+            <div className="rounded-full bg-indigo-50 p-4">
+              <BarChart3 className="h-10 w-10 text-indigo-300" />
+            </div>
+            <h3 className="mt-4 text-sm font-bold text-slate-900 uppercase">Tính năng {activeNav}</h3>
+            <p className="mt-2 text-xs text-slate-500 max-w-xs">Dữ liệu đang được đồng bộ từ module AI/Vector Search của hệ thống...</p>
+          </div>
+        );
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
       {isAuthenticated && (
         <Sidebar activeNav={activeNav} onNavChange={setActiveNav} onLogout={handleLogout} />
       )}
 
-      <main className={isAuthenticated ? "flex-1 md:ml-64" : "flex-1"}>
+      <main className={isAuthenticated ? "flex-1 md:ml-64 transition-all" : "flex-1"}>
         {isAuthenticated && (
           <Header
             searchQuery={searchQuery}
@@ -121,22 +172,8 @@ export default function App() {
               <LoginForm onLogin={handleLogin} />
             </div>
           ) : (
-            <div className="mx-auto max-w-7xl space-y-6">
-              <StatsCards stats={stats} />
-              
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-                <div className="lg:col-span-8">
-                  <DocumentTable
-                    documents={documents}
-                    onDocumentClick={handleDocumentClick}
-                    onRefresh={loadDocuments}
-                    isLoading={isLoading}
-                  />
-                </div>
-                <div className="lg:col-span-4">
-                  <UploadSection onUpload={handleUpload} />
-                </div>
-              </div>
+            <div className="mx-auto max-w-7xl">
+              {renderMainContent()}
             </div>
           )}
         </div>
