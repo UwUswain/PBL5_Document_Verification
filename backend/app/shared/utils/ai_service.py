@@ -23,6 +23,11 @@ def _extract_json_object(text: str) -> dict | None:
     if not text:
         return None
     text = text.strip()
+
+    # Strip common code fences if model wraps JSON (```json ... ```)
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text).strip()
     # Ưu tiên parse thẳng nếu model trả đúng JSON
     try:
         parsed = json.loads(text)
@@ -42,6 +47,30 @@ def _extract_json_object(text: str) -> dict | None:
     except Exception:
         return None
     return None
+
+
+def _response_to_text(response) -> str:
+    """
+    google-generativeai SDK đôi khi không populate `response.text` (hoặc trả theo parts).
+    Hàm này cố gắng lấy text theo nhiều đường để tăng tỉ lệ parse JSON thành công.
+    """
+    if response is None:
+        return ""
+
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    # Fallback: candidates[0].content.parts[].text
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return ""
+    try:
+        parts = getattr(getattr(candidates[0], "content", None), "parts", None) or []
+        merged = "".join([getattr(p, "text", "") for p in parts if getattr(p, "text", "")])
+        return (merged or "").strip()
+    except Exception:
+        return ""
 
 
 async def analyze_document_content(raw_text: str, image_path: str = None) -> dict:
@@ -97,7 +126,7 @@ Giờ hãy trả JSON cho Input dưới đây.
                 generation_config={"temperature": 0.2, "max_output_tokens": 256, "response_mime_type": "application/json"},
             )
 
-        parsed = _extract_json_object(getattr(response, "text", ""))
+        parsed = _extract_json_object(_response_to_text(response))
         if parsed:
             # Guardrails: normalize/validate minimal schema
             category = parsed.get("category", "Khác")
