@@ -17,8 +17,8 @@ export function Sidebar({ activeNav, onNavChange, onLogout }) {
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black">L</div>
           <div>
-            <h2 className="text-sm font-black text-slate-900 tracking-tight uppercase">PBL5 AI System</h2>
-            <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest">BKDN Engineering</p>
+            <h2 className="text-sm font-black text-slate-900 tracking-tight uppercase">PBL5</h2>
+            <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest">BKDN</p>
           </div>
         </div>
       </div>

@@ -38,13 +38,23 @@ export const docService = {
 
   getImageUrl: (path, type = 'uploads') => {
     if (!path) return null;
+    const BASE_URL = "http://localhost:8000";
+
     if (path.startsWith("http")) return path;
-    const cleanPath = path.replace(/^\//, '');
-    // Nối đúng folder storage đã mount trong FastAPI
-    if (cleanPath.includes('uploads/') || cleanPath.includes('qrcodes/')) {
-        return `${BASE_URL}/storage/${cleanPath}`;
+
+    //Lấy duy nhất tên file (vứt bỏ D:\... hay /storage/...)
+    const fileName = path.split(/[\\/]/).pop();
+
+    // xử lý theo loại folder
+    if (path.includes("qrcodes")) {
+      return `${BASE_URL}/storage/qrcodes/${fileName}`;
     }
-    return `${BASE_URL}/storage/${type}/${cleanPath}`;
+
+    // Xử lý ảnh Scan (Uploads)
+    //file là .png. Nếu tên file chưa có đuôi, ta tự thêm vào.
+    const finalFileName = fileName.includes('.') ? fileName : `${fileName}.png`;
+    
+    return `${BASE_URL}/storage/uploads/${finalFileName}`;
   },
 
   logout: () => {

@@ -7,7 +7,7 @@ export function Header({ searchQuery, onSearchChange, onSearchSubmit }) {
     <header className="flex flex-col items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4 sm:flex-row sm:items-center">
       <div>
         <h1 className="text-lg font-bold text-slate-900 uppercase">Hệ thống quản lý văn bản AI</h1>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PBL5 - Solo Project</p>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">PBL5</p>
       </div>
 
       <div className="relative w-full max-w-md">
