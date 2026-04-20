@@ -4,8 +4,8 @@ import { AutoZoomCard } from "./AutoZoomCard"
 import { cn } from "../../lib/utils";
 
 export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
-  const [isZoomed, setIsZoomed] = useState(false);
-  // 🔥 State lưu vị trí chuột để làm tâm phóng
+  const [isZoomMode, setIsZoomMode] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
 
   const aiData = useMemo(() => {
@@ -33,15 +33,6 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
     };
   }, [document]);
 
-  // 🔥 Hàm tính toán vị trí chuột tương đối trong khung ảnh
-  const handleMouseMove = (e) => {
-    if (!isZoomed) return;
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((e.pageX - left) / width) * 100;
-    const y = ((e.pageY - top) / height) * 100;
-    setMousePos({ x, y });
-  };
-
   if (!open || !document) return null;
 
   const imageUrl = getImageUrl(document.file_path || document.sha256_hash, 'uploads');
@@ -63,7 +54,14 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"><X /></button>
+          <button 
+            onClick={() => {
+              setIsZoomMode(false);
+              setZoomLevel(1);
+              onClose();
+            }} 
+            className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
+          ><X /></button>
         </div>
 
         {/* BODY */}
@@ -71,35 +69,65 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
           <div className="col-span-3 space-y-6">
             <div className="flex justify-between items-center">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Đối soát AI Detection</h3>
-              <div className="flex items-center gap-2 text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
-                <Search size={12} /> DI CHUỘT VÀO VÙNG MUỐN SOI CHI TIẾT
-              </div>
+              <button 
+                onClick={() => {
+                  setIsZoomMode(!isZoomMode);
+                  if (isZoomMode) setZoomLevel(1); // Reset zoom khi tắt
+                }}
+                className={cn(
+                  "flex items-center gap-2 text-[9px] font-bold px-3 py-1.5 rounded transition-colors uppercase tracking-widest",
+                  isZoomMode 
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" 
+                    : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                )}
+              >
+                <Search size={12} /> {isZoomMode ? "ĐANG BẬT SOI CHI TIẾT (LĂN CHUỘT ĐỂ ZOOM)" : "BẬT CHẾ ĐỘ SOI CHI TIẾT"}
+              </button>
             </div>
 
             {/* KHUNG CHỨA ẢNH - SMART ZOOM */}
             <div
-              className="relative border-2 border-slate-100 rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in shadow-inner"
-              onMouseEnter={() => setIsZoomed(true)}
-              onMouseLeave={() => setIsZoomed(false)}
-              onMouseMove={handleMouseMove}
+              className={cn(
+                "relative border-2 border-slate-100 rounded-xl overflow-hidden bg-slate-100 shadow-inner",
+                isZoomMode ? "cursor-crosshair" : "cursor-default"
+              )}
+              onMouseMove={(e) => {
+                if (!isZoomMode) return;
+                const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+                const x = ((e.pageX - left) / width) * 100;
+                const y = ((e.pageY - top) / height) * 100;
+                setMousePos({ x, y });
+              }}
+              onWheel={(e) => {
+                if (!isZoomMode) return;
+                // e.preventDefault() có thể gây lỗi React passive event nên mình không dùng trực tiếp ở đây,
+                // nhưng do giao diện nằm trong container overflow auto, lăn ở ảnh lúc scale có thể làm trôi trang.
+                // Để mượt, chúng ta cập nhật state zoom level.
+                setZoomLevel(prev => {
+                  // Cuộn lên -> deltaY âm -> phóng to
+                  // Cuộn xuống -> deltaY dương -> thu nhỏ
+                  const newZoom = prev + (e.deltaY < 0 ? 0.2 : -0.2);
+                  return Math.min(Math.max(1, newZoom), 5); // Giới hạn từ 1x đến 5x
+                });
+              }}
+              onMouseLeave={() => {
+                // Không bắt buộc reset ở đây, nhưng để mượt hơn thì giữ nguyên vị trí cũ.
+              }}
             >
               {imageUrl && (
                 <img
                   src={imageUrl}
-                  className={cn(
-                    "w-full h-auto transition-transform duration-200 ease-out",
-                    isZoomed ? "scale-[2.5]" : "scale-100"
-                  )}
+                  className="w-full h-auto transition-transform duration-100 ease-out"
                   style={{
-                    // 🔥 Tâm phóng to chính là vị trí chuột
+                    transform: `scale(${zoomLevel})`,
                     transformOrigin: `${mousePos.x}% ${mousePos.y}%`
                   }}
                   alt="Scan"
                 />
               )}
 
-              {/* Bounding Box - Ẩn khi đang zoom để không bị rối mắt */}
-              {!isZoomed && aiData.all.map((e, i) => (
+              {/* Bounding Box - Ẩn khi đang bật soi chi tiết để không bị rối */}
+              {!isZoomMode && aiData.all.map((e, i) => (
                 <div
                   key={i}
                   className="absolute border-2 border-red-500 bg-red-500/10 pointer-events-none transition-opacity"
