@@ -12,7 +12,7 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
     if (!document || !document.ai_results) return { all: [], summary: document?.summary || "" };
     let entities = [];
     try {
-      const parsed = typeof document.ai_results === "string" 
+      const parsed = typeof document.ai_results === "string"
         ? JSON.parse(document.ai_results) : document.ai_results;
       const raw = parsed.entities || (Array.isArray(parsed) ? parsed : []);
       entities = raw.map(e => {
@@ -28,7 +28,8 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
       signature: entities.find(e => e.label === "chu_ky" || e.label === "Signature"),
       seal: entities.find(e => e.label === "con_dau" || e.label === "Seal"),
       all: entities,
-      summary: document.summary || "AI đang tổng hợp dữ liệu..."
+      summary: document.summary || "AI đang tổng hợp dữ liệu...",
+      keywords: document.summary ? document.summary.split(" ").filter(w => w.length > 5).slice(0, 8) : []
     };
   }, [document]);
 
@@ -49,7 +50,7 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
   return (
     <div className="fixed inset-0 z-[100] flex justify-end bg-black/70 backdrop-blur-sm">
       <div className="h-full w-full max-w-6xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-        
+
         {/* HEADER */}
         <div className="flex justify-between items-center p-4 border-b bg-slate-50">
           <div className="flex items-center gap-3">
@@ -74,26 +75,26 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
                 <Search size={12} /> DI CHUỘT VÀO VÙNG MUỐN SOI CHI TIẾT
               </div>
             </div>
-            
+
             {/* KHUNG CHỨA ẢNH - SMART ZOOM */}
-            <div 
+            <div
               className="relative border-2 border-slate-100 rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in shadow-inner"
               onMouseEnter={() => setIsZoomed(true)}
               onMouseLeave={() => setIsZoomed(false)}
               onMouseMove={handleMouseMove}
             >
               {imageUrl && (
-                <img 
-                  src={imageUrl} 
+                <img
+                  src={imageUrl}
                   className={cn(
-                    "w-full h-auto transition-transform duration-200 ease-out", 
+                    "w-full h-auto transition-transform duration-200 ease-out",
                     isZoomed ? "scale-[2.5]" : "scale-100"
-                  )} 
+                  )}
                   style={{
                     // 🔥 Tâm phóng to chính là vị trí chuột
                     transformOrigin: `${mousePos.x}% ${mousePos.y}%`
                   }}
-                  alt="Scan" 
+                  alt="Scan"
                 />
               )}
 
@@ -124,6 +125,18 @@ export function DocumentDrawer({ document, open, onClose, getImageUrl }) {
             <div className="bg-indigo-600 text-white p-5 rounded-2xl shadow-xl shadow-indigo-100">
               <div className="flex items-center gap-2 mb-3 opacity-80"><Bot size={16} /> <span className="text-[10px] font-bold uppercase tracking-widest">Tóm tắt AI</span></div>
               <p className="text-sm leading-relaxed font-medium italic">"{aiData.summary}"</p>
+            </div>
+
+            <div className="p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-3">AI Keywords (Extracted)</span>
+              <div className="flex flex-wrap gap-2">
+                {aiData.keywords.map((kw, i) => (
+                  <span key={i} className="px-3 py-1 bg-white text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-full shadow-sm border border-indigo-100">
+                    {kw.replace(/[.,]/g, '')}
+                  </span>
+                ))}
+                {aiData.keywords.length === 0 && <span className="text-[10px] text-slate-400 italic">Đang phân tích từ khóa...</span>}
+              </div>
             </div>
 
             <div className="border border-slate-200 p-8 rounded-2xl bg-white text-center shadow-sm">
