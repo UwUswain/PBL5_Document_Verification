@@ -295,31 +295,30 @@ Chỉ trả về DUY NHẤT một JSON object hợp lệ.
 KHÔNG chào hỏi. KHÔNG giải thích. KHÔNG markdown.
 Output BẮT BUỘC bắt đầu bằng ký tự '{' và kết thúc bằng ký tự '}'.
 
-Schema:
-{"category":"Quyết định|Hợp đồng|Công văn|Đơn từ|Khác","summary":"tóm tắt 3-5 dòng tiếng Việt"}
+Schema bắt buộc:
+{
+  "category": "Quyết định|Hợp đồng|Công văn|Đơn từ|Khác",
+  "summary": "Tóm tắt cực kỳ dễ hiểu, chia làm 3 gạch đầu dòng: 1. Đơn vị ban hành. 2. Loại văn bản. 3. Nội dung chính. (Tuyệt đối phải sửa lỗi chính tả nếu OCR bị sai, thêm dấu chấm câu đàng hoàng)"
+}
 """.strip()
 
     try:
-        # Nếu OCR fail nhưng có ảnh, dùng Vision để "cứu"
-        is_vision = bool(image_path and os.path.exists(image_path) and not is_text_valid)
+        # Ưu tiên luôn truyền ảnh và text cho Gemini 1.5 Flash (Multimodal)
         payload = None
-        if is_vision:
+        if image_path and os.path.exists(image_path):
             img = Image.open(image_path)
-            payload = [prompt_template, img]
-        else:
-            # Nhúng thẳng text vào prompt để ép format ổn định hơn
             content = (raw_text or "").strip()
-            prompt = f"""{prompt_template}
-
-VĂN BẢN CẦN PHÂN TÍCH:
-{content[:3000]}
-"""
+            prompt = f"{prompt_template}\n\nNỘI DUNG OCR (có thể sai chính tả, hãy tự hiểu và sửa lại):\n{content[:3000]}"
+            payload = [prompt, img]
+        else:
+            content = (raw_text or "").strip()
+            prompt = f"{prompt_template}\n\nNỘI DUNG OCR:\n{content[:3000]}"
             payload = prompt
 
         response = model.generate_content(
             payload,
             generation_config={
-                "temperature": 0.0,
+                "temperature": 0.1,
                 "max_output_tokens": 800,
                 "top_p": 0.8,
             },
