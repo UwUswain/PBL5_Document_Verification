@@ -94,7 +94,7 @@ class DocumentService:
             final_entities.append({
                 "label": "chu_ky",
                 "confidence": 0.99,
-                "box": [w * 0.7, h * 0.75, w * 0.95, h * 0.85], # Góc phải dưới
+                "box": [720, 820, 950, 950], # Hạ thấp Y để khớp vùng ký tên
                 "is_ai_guessed": True
             })
             seal_data["count"] += 1
@@ -103,24 +103,34 @@ class DocumentService:
             final_entities.append({
                 "label": "con_dau",
                 "confidence": 0.99,
-                "box": [w * 0.65, h * 0.8, w * 0.85, h * 0.95], # Góc phải dưới
+                "box": [520, 780, 780, 950], # Dịch sang trái để khớp con dấu
                 "is_ai_guessed": True
             })
             seal_data["count"] += 1
 
         seal_data["entities"] = final_entities
 
-        # 9) Chuẩn hoá raw_text lưu DB
+        # 9) Đưa siêu dữ liệu vào seal_data để frontend đọc
+        seal_data["metadata"] = {
+            "document_number": ai_analysis.get("document_number", "N/A"),
+            "issuer": ai_analysis.get("issuer", "N/A"),
+            "issued_date": ai_analysis.get("issued_date", "N/A"),
+            "main_points": ai_analysis.get("main_points", []),
+            "insight": ai_analysis.get("insight", ""),
+            "keywords": ai_analysis.get("keywords", [])
+        }
+
+        # 10) Chuẩn hoá raw_text lưu DB
         raw_text_for_db = extracted_text if extracted_text else "Không trích xuất được nội dung rõ ràng từ ảnh quét."
 
-        # 10) Status logic
+        # 11) Status logic
         status = "verified" if (
             len(extracted_text) > 20
             and ai_analysis.get("category") != "Khác"
             and seal_data.get("count", 0) > 0
         ) else "pending"
 
-        # 11) Lưu DB
+        # 12) Lưu DB
         new_doc = Document(
             owner_id=user_id,
             file_name=file.filename,
@@ -210,11 +220,17 @@ class DocumentService:
         if not docs:
             return []
 
-        context = "\n".join([f"ID: {d.id} | Summary: {d.summary}" for d in docs])
+        context = ""
+        for d in docs:
+            meta = (d.ai_results or {}).get("metadata", {})
+            doc_info = f"ID: {d.id} | No: {meta.get('document_number')} | Issuer: {meta.get('issuer')} | Summary: {d.summary} | Keywords: {', '.join(meta.get('keywords', []))}"
+            context += doc_info + "\n"
+
         prompt = (
-            f"Danh sách:\n{context}\n\n"
-            f"Tìm UUID liên quan nhất đến: '{query}'. "
-            "Trả về danh sách UUID cách nhau bởi dấu phẩy. Nếu không có, trả về 'None'."
+            f"Hệ thống quản lý văn bản scan AI. Danh sách dữ liệu hiện có:\n{context}\n\n"
+            f"Tìm các UUID liên quan nhất đến yêu cầu tìm kiếm: '{query}'. "
+            "Trả về danh sách UUID cách nhau bởi dấu phẩy, sắp xếp theo độ liên quan giảm dần. "
+            "Nếu không có kết quả nào thực sự liên quan, trả về 'None'."
         )
 
         try:

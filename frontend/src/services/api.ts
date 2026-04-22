@@ -62,6 +62,8 @@ export const docService = {
     const finalFileName = fileName?.includes('.') ? fileName : `${fileName}.png`;
     return `${BASE_URL}/storage/uploads/${finalFileName}`;
   },
+  
+  searchDocs: (query: string) => api.get("/docs/search", { params: { query } }),
 
   chat: (message: string) => {
     return api.post("/chat", { message });

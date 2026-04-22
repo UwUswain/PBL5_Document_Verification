@@ -305,15 +305,27 @@ async def analyze_document_content(raw_text: str, image_path: str = None) -> dic
         return {"category": "Khác", "summary": "Không đủ dữ liệu để AI phân tích nội dung."}
 
     prompt_template = """
-Chỉ trả về DUY NHẤT một JSON object.
-KHÔNG giải thích. KHÔNG markdown.
+Chỉ trả về DUY NHẤT một JSON object. KHÔNG giải thích. KHÔNG markdown.
+Nhiệm vụ: Trích xuất thông tin ngữ nghĩa sâu (Deep Semantic Extraction) từ văn bản hành chính/tài liệu.
+
 Schema bắt buộc:
 {
   "category": "Quyết định|Hợp đồng|Công văn|Đơn từ|Khác",
-  "summary": "Tóm tắt trong tối đa 30 từ. Viết cho người dân dễ hiểu. Không liệt kê. Không bullet. Không chép lại OCR.",
+  "document_number": "Số hiệu văn bản (vd: 2140/QĐ-UBND, N/A nếu không có)",
+  "issuer": "Cơ quan/Người ban hành",
+  "issued_date": "Ngày ban hành (vd: 05/09/2016, N/A nếu không có)",
+  "summary_short": "Executive Summary: 1 câu duy nhất (dưới 30 từ), cực kỳ dễ hiểu tóm gọn mục đích văn bản.",
+  "main_points": [
+    "Điểm chính 1 (ngắn gọn)",
+    "Điểm chính 2",
+    "..."
+  ],
+  "insight": "AI Insight: 1 câu nhận định chuyên sâu về tính chất/tầm quan trọng của văn bản này.",
+  "keywords": ["từ khóa 1", "từ khóa 2", "từ khóa 3"],
   "has_signature": true,
   "has_seal": true
 }
+(Tuyệt đối PHẢI SỬA LỖI CHÍNH TẢ TỪ OCR, TIẾNG VIỆT CÓ DẤU CHUẨN MỰC)
 """.strip()
 
     try:
@@ -352,33 +364,39 @@ Schema bắt buộc:
             if category not in ["Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác"]:
                 category = "Khác"
             
-            raw_summary = parsed.get("summary")
-            summary = str(raw_summary).strip() if raw_summary else "Không có tóm tắt"
-
             return {
                 "category": category, 
-                "summary": summary,
+                "summary": str(parsed.get("summary_short", "Không có tóm tắt")).strip(),
+                "document_number": parsed.get("document_number", "N/A"),
+                "issuer": parsed.get("issuer", "N/A"),
+                "issued_date": parsed.get("issued_date", "N/A"),
+                "main_points": parsed.get("main_points", []),
+                "insight": parsed.get("insight", ""),
+                "keywords": parsed.get("keywords", []),
                 "has_signature": bool(parsed.get("has_signature", False)),
                 "has_seal": bool(parsed.get("has_seal", False))
             }
 
-            summary_src = (
-                raw_out
-                if (
-                    raw_out
-                    and len(raw_out.strip()) > 30
-                    and "here is" not in raw_out.lower()
-                    and not _looks_like_json_fragment(raw_out)
-                )
-                else (raw_text or "")
-            )
-            return {"category": guessed, "summary": _rule_based_summary(summary_src)}
-
-        return {"category": "Khác", "summary": "Nội dung đã được lưu, AI trả về định dạng không chuẩn."}
-
+        # Nếu parse JSON vẫn fail (do model bị lỗi), fallback nhẹ nhàng
+        guessed = _guess_category_from_text(raw_text or "")
+        summary_src = _rule_based_summary(raw_text or "")
+        return {
+            "category": guessed,
+            "summary": summary_src,
+            "document_number": "N/A", "issuer": "N/A", "issued_date": "N/A",
+            "main_points": [], "insight": "", "keywords": [],
+            "has_signature": False, "has_seal": False
+        }
     except Exception as e:
         print(f"❌ Gemini Error: {e}")
-        return {"category": "Khác", "summary": "AI đang bận, vui lòng kiểm tra lại sau."}
+        guessed = _guess_category_from_text(raw_text or "")
+        return {
+            "category": guessed,
+            "summary": _rule_based_summary(raw_text or ""),
+            "document_number": "N/A", "issuer": "N/A", "issued_date": "N/A",
+            "main_points": [], "insight": "", "keywords": [],
+            "has_signature": False, "has_seal": False
+        }
 
 async def call_gemini_pure_text(prompt: str) -> str:
     """Hàm chỉ lấy text thô từ Gemini (Phục vụ AI Search)"""
