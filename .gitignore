@@ -43,6 +43,7 @@ hub/
 backend/storage/uploads/*
 backend/storage/qrcodes/*
 backend/storage/processed/*
+
 # Giữ lại folder nhưng bỏ qua nội dung
 !backend/storage/.gitkeep
 !backend/storage/uploads/.gitkeep

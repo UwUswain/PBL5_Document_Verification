@@ -282,111 +282,86 @@ def _looks_like_json_fragment(text: str) -> bool:
     return ('"category"' in t) or ('"summary"' in t)
 
 
+def clean_ocr(text: str) -> str:
+    """Làm sạch và chuẩn hóa text OCR trước khi đưa vào Gemini để tránh rác."""
+    if not text:
+        return ""
+    # 1. Loại bỏ các ký tự đặc biệt rác do OCR nhầm (chỉ giữ lại chữ, số, dấu câu cơ bản)
+    text = re.sub(r'[^\w\s\.,;:\-\(\)\/\%\'"_]', ' ', text)
+    # 2. Xóa khoảng trắng thừa và dấu xuống dòng liên tiếp
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n', text)
+    # 3. Nối các từ bị gãy dòng sai (ví dụ dòng kết thúc bằng ký tự thường, dòng sau bắt đầu bằng ký tự thường)
+    text = re.sub(r'([a-z])\n([a-z])', r'\1 \2', text)
+    return text.strip()
+
 async def analyze_document_content(raw_text: str, image_path: str = None) -> dict:
     """Phân loại và tóm tắt văn bản (Có fallback Vision)"""
     
     # FIX: Chặn spam AI nếu text quá ngắn và không có ảnh
-    is_text_valid = raw_text and len(raw_text.strip()) > 15
+    clean_text = clean_ocr(raw_text)
+    is_text_valid = clean_text and len(clean_text) > 15
     if not is_text_valid and not image_path:
         return {"category": "Khác", "summary": "Không đủ dữ liệu để AI phân tích nội dung."}
 
     prompt_template = """
-Chỉ trả về DUY NHẤT một JSON object hợp lệ.
-KHÔNG chào hỏi. KHÔNG giải thích. KHÔNG markdown.
-Output BẮT BUỘC bắt đầu bằng ký tự '{' và kết thúc bằng ký tự '}'.
-
+Chỉ trả về DUY NHẤT một JSON object.
+KHÔNG giải thích. KHÔNG markdown.
 Schema bắt buộc:
 {
   "category": "Quyết định|Hợp đồng|Công văn|Đơn từ|Khác",
-  "summary": "Tóm tắt cực kỳ dễ hiểu, chia làm 3 gạch đầu dòng: 1. Đơn vị ban hành. 2. Loại văn bản. 3. Nội dung chính. (Tuyệt đối phải sửa lỗi chính tả nếu OCR bị sai, thêm dấu chấm câu đàng hoàng)"
+  "summary": "Tóm tắt trong tối đa 30 từ. Viết cho người dân dễ hiểu. Không liệt kê. Không bullet. Không chép lại OCR.",
+  "has_signature": true,
+  "has_seal": true
 }
 """.strip()
 
     try:
-        # Ưu tiên luôn truyền ảnh và text cho Gemini 1.5 Flash (Multimodal)
         payload = None
         if image_path and os.path.exists(image_path):
             img = Image.open(image_path)
-            content = (raw_text or "").strip()
-            prompt = f"{prompt_template}\n\nNỘI DUNG OCR (có thể sai chính tả, hãy tự hiểu và sửa lại):\n{content[:3000]}"
+            prompt = f"{prompt_template}\n\nNỘI DUNG OCR ĐÃ LÀM SẠCH (hãy kết hợp đọc ảnh để khôi phục nội dung):\n{clean_text[:3000]}"
             payload = [prompt, img]
         else:
-            content = (raw_text or "").strip()
-            prompt = f"{prompt_template}\n\nNỘI DUNG OCR:\n{content[:3000]}"
+            prompt = f"{prompt_template}\n\nNỘI DUNG OCR ĐÃ LÀM SẠCH:\n{clean_text[:3000]}"
             payload = prompt
 
         response = model.generate_content(
             payload,
             generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 800,
+                "temperature": 0.2,
                 "top_p": 0.8,
-            },
+                "response_mime_type": "application/json"
+            }
         )
 
         # Nếu bị safety block -> thử fallback model (nếu có)
         if (fallback_model is not None) and (_response_is_blocked(response) or _finish_reason_is_safety(response)):
             response = fallback_model.generate_content(
                 payload,
-                generation_config={"temperature": 0.2, "max_output_tokens": 256, "response_mime_type": "application/json"},
+                generation_config={"temperature": 0.2, "response_mime_type": "application/json"},
             )
 
         raw_out = _response_to_text(response)
         if os.getenv("GEMINI_DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}:
-            print(f"🧠 Gemini RAW (first 300 chars): {raw_out[:300]!r}")
-        parsed = _extract_json_object(raw_out) if _is_complete_json_object(raw_out) else None
+            print(f"🧠 Gemini RAW: {raw_out!r}")
+            
+        parsed = _extract_json_object(raw_out)
         if parsed:
-            # Guardrails: normalize/validate minimal schema
             category = parsed.get("category", "Khác")
             if category not in ["Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác"]:
                 category = "Khác"
-            summary = parsed.get("summary") or "Không có tóm tắt"
-            return {"category": category, "summary": str(summary).strip()}
+            
+            raw_summary = parsed.get("summary")
+            summary = str(raw_summary).strip() if raw_summary else "Không có tóm tắt"
 
-        if _response_is_blocked(response) or _finish_reason_is_safety(response):
-            ratings = _get_safety_ratings(response)
-            print(f"⚠️ Gemini response blocked by safety. safety_ratings={ratings}")
             return {
-                "category": "Khác",
-                "summary": "AI bị chặn (safety filter). Hãy thử lại hoặc đổi model/cấu hình Gemini.",
+                "category": category, 
+                "summary": summary,
+                "has_signature": bool(parsed.get("has_signature", False)),
+                "has_seal": bool(parsed.get("has_seal", False))
             }
 
-        # Nếu model trả ra text nhưng không đúng JSON -> thử 1 lần "repair" để ép về JSON.
-        # Lưu ý: nếu raw_out chỉ là câu xã giao (không có '{'), repair nên làm trên raw_text gốc.
-        if raw_out and not parsed:
-            repair_input = raw_out if ("{" in raw_out and "}" in raw_out) else (raw_text or "")
-            repair_prompt = (
-                "Trả về DUY NHẤT 1 JSON object, KHÔNG markdown, KHÔNG giải thích.\n"
-                'Schema bắt buộc: {"category":"...","summary":"..."}\n'
-                "category chỉ được là một trong: Quyết định, Hợp đồng, Công văn, Đơn từ, Khác.\n"
-                "summary: 3-5 dòng tiếng Việt, ngắn gọn.\n\n"
-                f"Văn bản cần phân tích:\n{(repair_input or '')[:3000]}"
-            )
-            try:
-                repair_resp = model.generate_content(
-                    repair_prompt,
-                    generation_config={
-                        "temperature": 0.0,
-                        "max_output_tokens": 500,
-                        "top_p": 0.8,
-                    },
-                )
-                repair_out = _response_to_text(repair_resp)
-                if os.getenv("GEMINI_DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}:
-                    print(f"🧠 Gemini REPAIR RAW (first 300 chars): {repair_out[:300]!r}")
-                repaired = _extract_json_object(repair_out) if _is_complete_json_object(repair_out) else None
-                if repaired:
-                    category = repaired.get("category", "Khác")
-                    if category not in ["Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác"]:
-                        category = "Khác"
-                    summary = repaired.get("summary") or "Không có tóm tắt"
-                    return {"category": category, "summary": str(summary).strip()}
-            except Exception as e:
-                print(f"⚠️ Gemini repair error: {e}")
-
-            # Nếu repair vẫn fail -> fallback đoán category + cắt summary để không trả rỗng
-            guessed = _guess_category_from_text(raw_text or raw_out or "")
-            # summary ưu tiên lấy từ raw_out nếu có nội dung khác câu xã giao
             summary_src = (
                 raw_out
                 if (

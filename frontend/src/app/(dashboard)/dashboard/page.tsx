@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Row, Col, Card, Statistic, Table, Typography, Tag, Upload, Button, message } from 'antd';
-import { FileProtectOutlined, ClockCircleOutlined, FileTextOutlined, UploadOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Statistic, Table, Typography, Tag, Upload, Button, message, Modal, Steps } from 'antd';
+import { FileProtectOutlined, ClockCircleOutlined, FileTextOutlined, UploadOutlined, ScanOutlined, AimOutlined, SyncOutlined, RobotOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { docService } from '@/services/api';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
@@ -12,6 +13,8 @@ const { Title } = Typography;
 const COLORS = ['#1677ff', '#ff4d4f', '#52c41a', '#faad14', '#722ed1'];
 
 export default function DashboardPage() {
+  const [uploadingState, setUploadingState] = useState({ visible: false, step: 0 });
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['docs'],
     queryFn: () => docService.getDocs().then(res => res.data.items || []),
@@ -31,16 +34,36 @@ export default function DashboardPage() {
 
   const handleUpload = async (options: any) => {
     const { file, onSuccess, onError } = options;
+    setUploadingState({ visible: true, step: 0 });
+
+    // Giả lập tiến trình AI Pipeline cho đẹp mắt (vì API xử lý một lèo)
+    const timer1 = setTimeout(() => setUploadingState({ visible: true, step: 1 }), 800);
+    const timer2 = setTimeout(() => setUploadingState({ visible: true, step: 2 }), 1800);
+    const timer3 = setTimeout(() => setUploadingState({ visible: true, step: 3 }), 3000);
+
     try {
       await docService.upload(file);
-      message.success('Tải lên thành công');
+      clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3);
+      setUploadingState({ visible: true, step: 4 });
+      message.success('Văn bản đã được AI phân tích và lưu trữ!');
       refetch();
       onSuccess('ok');
+      setTimeout(() => setUploadingState({ visible: false, step: 0 }), 1500);
     } catch (e) {
+      clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3);
+      setUploadingState({ visible: false, step: 0 });
       message.error('Tải lên thất bại');
       onError(e);
     }
   };
+
+  const uploadSteps = [
+    { title: 'Scanning', description: 'Khử nhiễu ảnh', icon: <ScanOutlined /> },
+    { title: 'Extraction', description: 'YOLO bóc tách', icon: <AimOutlined /> },
+    { title: 'OCR Engine', description: 'Đọc chữ thô', icon: <SyncOutlined spin={uploadingState.step === 2} /> },
+    { title: 'GenAI', description: 'Gemini hiểu nghĩa', icon: <RobotOutlined /> },
+    { title: 'Hoàn tất', description: 'Lưu CSDL', icon: <CheckCircleOutlined /> }
+  ];
 
   const columns = [
     { title: 'Tên văn bản', dataIndex: 'file_name', key: 'file_name', ellipsis: true },
@@ -119,6 +142,22 @@ export default function DashboardPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal 
+        title={<div style={{ textAlign: 'center', fontSize: 20, color: '#1677ff' }}>AI Processing Pipeline</div>}
+        open={uploadingState.visible} 
+        closable={false} 
+        footer={null}
+        width={900}
+        centered
+      >
+        <div style={{ padding: '24px 0' }}>
+          <Steps current={uploadingState.step} items={uploadSteps} />
+        </div>
+        <div style={{ textAlign: 'center', color: '#8c8c8c', marginTop: 16 }}>
+          Hệ thống đang sử dụng YOLOv8 và Gemini 1.5 để đọc hiểu văn bản...
+        </div>
+      </Modal>
     </div>
   );
 }

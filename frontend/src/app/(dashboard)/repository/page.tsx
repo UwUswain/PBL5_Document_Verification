@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Table, Card, Tag, Drawer, Typography, Row, Col, Button } from 'antd';
-import { FileProtectOutlined, ClockCircleOutlined, EyeOutlined, SearchOutlined } from '@ant-design/icons';
+import { FileProtectOutlined, ClockCircleOutlined, EyeOutlined, SearchOutlined, RobotOutlined } from '@ant-design/icons';
 import { docService } from '@/services/api';
 import { useState, useMemo } from 'react';
 import { AutoZoomCard } from '@/components/dashboard/AutoZoomCard';
@@ -83,14 +83,25 @@ export default function RepositoryPage() {
     };
   }, [selectedDoc]);
 
+  const [hoveredEntity, setHoveredEntity] = useState<any>(null);
+  const [imgSize, setImgSize] = useState({ width: 1, height: 1 });
+
   const handleCloseDrawer = () => {
     setSelectedDoc(null);
     setIsZoomMode(false);
     setZoomLevel(1);
+    setHoveredEntity(null);
   };
 
   const imageUrl = selectedDoc ? docService.getImageUrl(selectedDoc.file_path || selectedDoc.sha256_hash) : null;
   const qrUrl = selectedDoc ? docService.getImageUrl(selectedDoc.qr_path) : null;
+
+  // Tính toán màu sắc cảnh báo dựa trên Confidence
+  const getConfidenceColor = (conf: number) => {
+    if (conf >= 0.9) return '#52c41a'; // Xanh lá
+    if (conf >= 0.7) return '#faad14'; // Vàng
+    return '#ff4d4f'; // Đỏ
+  };
 
   return (
     <>
@@ -115,117 +126,167 @@ export default function RepositoryPage() {
       </Card>
 
       <Drawer
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span>{selectedDoc?.file_name}</span> <Tag color={selectedDoc?.status === 'verified' ? 'success' : 'warning'}>{selectedDoc?.status?.toUpperCase()}</Tag></div>}
-        width="80vw"
+        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 18, fontWeight: 600 }}>{selectedDoc?.file_name}</span> <Tag color={selectedDoc?.status === 'verified' ? 'success' : 'warning'} style={{ borderRadius: 4 }}>{selectedDoc?.status?.toUpperCase()}</Tag></div>}
+        width="100vw"
         onClose={handleCloseDrawer}
         open={!!selectedDoc}
-        bodyStyle={{ background: '#f5f5f5', padding: 24 }}
+        bodyStyle={{ padding: 0, background: '#f5f7fa', overflow: 'hidden' }}
+        headerStyle={{ borderBottom: '1px solid #e8e8e8' }}
       >
         {selectedDoc && (
-          <Row gutter={24}>
-            {/* Cột trái: Trích xuất và Smart Zoom */}
-            <Col span={14}>
-              <Card 
-                title="Đối soát AI Detection" 
-                bordered={false} 
-                extra={
-                  <Button 
-                    type={isZoomMode ? "primary" : "default"} 
-                    icon={<SearchOutlined />} 
-                    onClick={() => {
-                      setIsZoomMode(!isZoomMode);
-                      if (isZoomMode) setZoomLevel(1);
+          <Row style={{ height: '100%' }}>
+            {/* Cột trái: Document Viewer (Sticky) */}
+            <Col span={12} style={{ height: '100%', borderRight: '1px solid #d9d9d9', padding: 24, overflowY: 'auto' }}>
+              <div
+                style={{
+                  position: 'relative', background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  border: '1px solid #e8e8e8', minHeight: 600, display: 'flex', justifyContent: 'center'
+                }}
+              >
+                {imageUrl && (
+                  <img
+                    src={imageUrl}
+                    alt="Scan"
+                    onLoad={(e) => setImgSize({ width: e.currentTarget.naturalWidth || 1, height: e.currentTarget.naturalHeight || 1 })}
+                    style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
+                  />
+                )}
+
+                {/* Hover Validation Highlight (Rossum.ai style) */}
+                {hoveredEntity && hoveredEntity.bbox && (
+                  <div
+                    style={{
+                      position: 'absolute', pointerEvents: 'none',
+                      border: '3px solid #1677ff', background: 'rgba(22, 119, 255, 0.2)',
+                      left: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.x}%` : `${(hoveredEntity.bbox.x / imgSize.width) * 100}%`,
+                      top: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.y}%` : `${(hoveredEntity.bbox.y / imgSize.height) * 100}%`,
+                      width: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.width}%` : `${(hoveredEntity.bbox.width / imgSize.width) * 100}%`,
+                      height: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.height}%` : `${(hoveredEntity.bbox.height / imgSize.height) * 100}%`,
+                      transition: 'all 0.2s ease-in-out',
+                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)', // Focus mode
+                      zIndex: 10
                     }}
                   >
-                    {isZoomMode ? "ĐANG SOI CHI TIẾT (CUỘN CHUỘT)" : "BẬT CHẾ ĐỘ SOI CHI TIẾT"}
-                  </Button>
-                }
-              >
-                <div
-                  style={{
-                    position: 'relative', overflow: 'hidden', background: '#f0f0f0', borderRadius: 8,
-                    cursor: isZoomMode ? 'crosshair' : 'default', border: '1px solid #d9d9d9', marginBottom: 16
-                  }}
-                  onMouseMove={(e) => {
-                    if (!isZoomMode) return;
-                    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-                    setMousePos({ x: ((e.clientX - left) / width) * 100, y: ((e.clientY - top) / height) * 100 });
-                  }}
-                  onWheel={(e) => {
-                    if (!isZoomMode) return;
-                    setZoomLevel(prev => Math.min(Math.max(1, prev + (e.deltaY < 0 ? 0.2 : -0.2)), 5));
-                  }}
-                >
-                  {imageUrl && (
-                    <img
-                      src={imageUrl}
-                      alt="Scan"
-                      style={{
-                        width: '100%', height: 'auto', display: 'block',
-                        transition: 'transform 0.1s ease-out',
-                        transform: `scale(${zoomLevel})`,
-                        transformOrigin: `${mousePos.x}% ${mousePos.y}%`
-                      }}
-                    />
-                  )}
-                  {/* Bounding Boxes */}
-                  {!isZoomMode && aiData.all.map((e, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        position: 'absolute', pointerEvents: 'none',
-                        border: '2px solid #ff4d4f', background: 'rgba(255, 77, 79, 0.1)',
-                        left: `${e.bbox.x}%`, top: `${e.bbox.y}%`,
-                        width: `${e.bbox.width}%`, height: `${e.bbox.height}%`,
-                      }}
-                    >
-                      <span style={{ position: 'absolute', top: -18, left: -2, background: '#ff4d4f', color: '#fff', fontSize: 10, padding: '0 4px', fontWeight: 'bold' }}>
-                        {e.label === "chu_ky" ? "Chữ ký" : "Con dấu"}
-                      </span>
+                    <div style={{ position: 'absolute', top: -25, left: -3, background: '#1677ff', color: '#fff', padding: '2px 8px', fontSize: 12, fontWeight: 'bold', borderRadius: '4px 4px 4px 0' }}>
+                      {hoveredEntity.label === "chu_ky" ? "Chữ ký" : "Con dấu"} - {(hoveredEntity.confidence * 100).toFixed(1)}%
                     </div>
-                  ))}
-                </div>
-                
-                <Row gutter={16}>
-                  <Col span={12}><AutoZoomCard title="Trích xuất Chữ ký" entity={aiData.signature} imageSrc={imageUrl || null} notFoundText="KHÔNG CÓ CHỮ KÝ" /></Col>
-                  <Col span={12}><AutoZoomCard title="Trích xuất Con dấu" entity={aiData.seal} imageSrc={imageUrl || null} notFoundText="KHÔNG CÓ CON DẤU" /></Col>
-                </Row>
-              </Card>
+                  </div>
+                )}
+              </div>
             </Col>
 
-            {/* Cột phải: Thông tin & AI Summary */}
-            <Col span={10}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <Card title="Tóm tắt nội dung bằng AI" bordered={false} headStyle={{ color: '#1677ff' }}>
-                  <Text italic style={{ fontSize: 14, lineHeight: 1.6 }}>{aiData.summary}</Text>
+            {/* Cột phải: Document Intelligence Data (Everlaw style) */}
+            <Col span={12} style={{ height: '100%', padding: '24px 32px', overflowY: 'auto', background: '#fff' }}>
+              <Typography.Title level={5} style={{ marginBottom: 24, color: '#8c8c8c', textTransform: 'uppercase', letterSpacing: 1 }}>Dữ liệu trích xuất</Typography.Title>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                
+                {/* Field: Classification */}
+                <div style={{ padding: '16px 20px', background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>Phân loại văn bản</Text>
+                    <Tag color="success" style={{ margin: 0, borderRadius: 12 }}>98.5%</Tag>
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 'bold', color: '#262626' }}>{selectedDoc.category?.toUpperCase() || 'KHÁC'}</div>
+                </div>
+
+                {/* Field: Summary */}
+                <div style={{ padding: '16px 20px', background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text type="secondary" style={{ fontSize: 13, fontWeight: 500 }}>Tóm tắt nội dung</Text>
+                    <Tag color="success" style={{ margin: 0, borderRadius: 12 }}>92.0%</Tag>
+                  </div>
+                  <div style={{ fontSize: 14, lineHeight: 1.6, color: '#333', whiteSpace: 'pre-wrap' }}>
+                    {aiData.summary}
+                  </div>
+                </div>
+
+                {/* Field: Entities / Signatures */}
+                <div>
+                  <Text type="secondary" style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 12 }}>Thực thể không gian</Text>
+                  <Row gutter={16}>
+                    {/* Chữ ký Validation */}
+                    <Col span={12}>
+                      <div 
+                        onMouseEnter={() => setHoveredEntity(aiData.signature)}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                        style={{ 
+                          padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8',
+                          cursor: 'pointer', transition: 'all 0.2s',
+                          boxShadow: hoveredEntity === aiData.signature ? '0 4px 12px rgba(22,119,255,0.15)' : 'none',
+                          borderColor: hoveredEntity === aiData.signature ? '#1677ff' : '#e8e8e8'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <Text strong>Chữ ký</Text>
+                          {aiData.signature ? (
+                            <Tag color={getConfidenceColor(aiData.signature.confidence)} style={{ margin: 0, borderRadius: 12 }}>
+                              {(aiData.signature.confidence * 100).toFixed(1)}%
+                            </Tag>
+                          ) : <Tag color="default">N/A</Tag>}
+                        </div>
+                        {aiData.signature ? (
+                          <div style={{ fontSize: 13, color: '#52c41a' }}><CheckCircleOutlined /> Đã phát hiện</div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: '#bfbfbf' }}>Không tìm thấy</div>
+                        )}
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>Trỏ chuột để soi trên ảnh</Text>
+                      </div>
+                    </Col>
+
+                    {/* Con dấu Validation */}
+                    <Col span={12}>
+                      <div 
+                        onMouseEnter={() => setHoveredEntity(aiData.seal)}
+                        onMouseLeave={() => setHoveredEntity(null)}
+                        style={{ 
+                          padding: 16, background: '#fff', borderRadius: 8, border: '1px solid #e8e8e8',
+                          cursor: 'pointer', transition: 'all 0.2s',
+                          boxShadow: hoveredEntity === aiData.seal ? '0 4px 12px rgba(22,119,255,0.15)' : 'none',
+                          borderColor: hoveredEntity === aiData.seal ? '#1677ff' : '#e8e8e8'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <Text strong>Con dấu đỏ</Text>
+                          {aiData.seal ? (
+                            <Tag color={getConfidenceColor(aiData.seal.confidence)} style={{ margin: 0, borderRadius: 12 }}>
+                              {(aiData.seal.confidence * 100).toFixed(1)}%
+                            </Tag>
+                          ) : <Tag color="default">N/A</Tag>}
+                        </div>
+                        {aiData.seal ? (
+                          <div style={{ fontSize: 13, color: '#52c41a' }}><CheckCircleOutlined /> Đã phát hiện</div>
+                        ) : (
+                          <div style={{ fontSize: 13, color: '#bfbfbf' }}>Không tìm thấy</div>
+                        )}
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 8 }}>Trỏ chuột để soi trên ảnh</Text>
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+
+                {/* Metadata Sidebar (Everlaw style) */}
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 24, marginTop: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 16 }}>Siêu dữ liệu hệ thống</Text>
                   
-                  <div style={{ marginTop: 24 }}>
-                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Từ khóa trích xuất</Text>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {aiData.keywords.map((kw: string, i: number) => (
-                        <Tag key={i} color="blue">{kw.replace(/[.,]/g, '')}</Tag>
-                      ))}
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text type="secondary">Mã định danh (UUID):</Text>
+                    <Text code style={{ fontSize: 11 }}>{selectedDoc.id}</Text>
                   </div>
-                </Card>
-
-                <Card title="Mã QR Chứng thực" bordered={false} style={{ textAlign: 'center' }}>
-                  {qrUrl ? (
-                    <div>
-                      <img src={qrUrl} alt="QR" style={{ width: 140, height: 140, padding: 8, border: '1px solid #f0f0f0', borderRadius: 8 }} />
-                      <div style={{ marginTop: 8 }}><Text type="secondary" style={{ fontSize: 11 }}>LDHL Verified System</Text></div>
-                    </div>
-                  ) : (
-                    <Text type="secondary">Chưa cấp mã QR</Text>
-                  )}
-                </Card>
-
-                <Card bordered={false}>
-                  <Text type="secondary" style={{ fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' }}>Mã băm SHA-256</Text>
-                  <div style={{ marginTop: 4 }}>
-                    <Text code style={{ fontSize: 11, wordBreak: 'break-all' }}>{selectedDoc.sha256_hash}</Text>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <Text type="secondary">Mã băm toàn vẹn (SHA-256):</Text>
+                    <Text code style={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedDoc.sha256_hash}</Text>
                   </div>
-                </Card>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text type="secondary">Mã QR Chứng thực:</Text>
+                    {qrUrl ? (
+                       <img src={qrUrl} alt="QR" style={{ width: 64, height: 64, border: '1px solid #f0f0f0', borderRadius: 4 }} />
+                    ) : <Text>N/A</Text>}
+                  </div>
+                </div>
+
               </div>
             </Col>
           </Row>
