@@ -150,7 +150,17 @@ export default function RepositoryPage() {
             dataSource={displayDocs} 
             rowKey="id" 
             locale={{
-              emptyText: <EmptyState type={searchResults ? 'search' : 'docs'} />
+              emptyText: (
+                <EmptyState 
+                  type={searchResults ? 'search' : 'docs'} 
+                  onAction={() => {
+                    // Trigger the same logic as the header upload button if needed, 
+                    // or simply scroll to top/show a message. 
+                    // In a real app, this might open the upload modal directly.
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              )
             }}
             pagination={{ pageSize: 10 }}
           />
@@ -161,7 +171,12 @@ export default function RepositoryPage() {
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 18, fontWeight: 600, color: token.colorText }}>{selectedDoc?.file_name}</span>
-            <Tag color="success" style={{ borderRadius: 4, fontWeight: 'bold', fontSize: 10 }}>VERIFIED</Tag>
+            <Tag 
+              color={selectedDoc?.status === 'verified' ? 'success' : selectedDoc?.status === 'error' ? 'error' : 'warning'} 
+              style={{ borderRadius: 4, fontWeight: 'bold', fontSize: 10 }}
+            >
+              {(selectedDoc?.status || 'PENDING').toUpperCase()}
+            </Tag>
           </div>
         }
         width="95%"

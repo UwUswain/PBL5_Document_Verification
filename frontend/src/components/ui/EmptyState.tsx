@@ -11,8 +11,10 @@ interface EmptyStateProps {
   description?: string;
   onAction?: () => void;
   actionText?: string;
+  actionIcon?: React.ReactNode;
   icon?: React.ReactNode;
   type?: 'docs' | 'search' | 'default';
+  transparent?: boolean;
 }
 
 export function EmptyState({ 
@@ -20,8 +22,10 @@ export function EmptyState({
   description, 
   onAction, 
   actionText = "Tải lên ngay", 
+  actionIcon,
   icon,
-  type = 'docs'
+  type = 'docs',
+  transparent = false
 }: EmptyStateProps) {
   
   const defaultIcon = type === 'search' ? <FileSearchOutlined style={{ fontSize: 64, color: '#bfbfbf' }} /> : undefined;
@@ -31,9 +35,14 @@ export function EmptyState({
     : "Có vẻ như bạn chưa tải lên văn bản nào. Hãy bắt đầu bằng cách tải lên tài liệu đầu tiên!";
 
   return (
-    <div style={{ padding: '60px 0', textAlign: 'center', background: '#fff', borderRadius: 8 }}>
+    <div style={{ 
+      padding: '60px 0', 
+      textAlign: 'center', 
+      background: transparent ? 'transparent' : '#fff', 
+      borderRadius: 8 
+    }}>
       <Empty
-        image={icon || Empty.PRESENTED_IMAGE_SIMPLE}
+        image={icon || defaultIcon || Empty.PRESENTED_IMAGE_SIMPLE}
         imageStyle={{ height: 120 }}
         description={
           <div style={{ marginTop: 16 }}>
@@ -49,7 +58,7 @@ export function EmptyState({
         {onAction && (
           <Button 
             type="primary" 
-            icon={<UploadOutlined />} 
+            icon={actionIcon || (type === 'docs' ? <UploadOutlined /> : undefined)} 
             size="large" 
             onClick={onAction}
             style={{ marginTop: 16, borderRadius: 6, height: 40, padding: '0 24px' }}

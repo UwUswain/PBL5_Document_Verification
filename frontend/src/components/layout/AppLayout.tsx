@@ -8,11 +8,12 @@ import {
   UserOutlined,
   GlobalOutlined,
   BulbOutlined,
-  BulbFilled
+  BulbFilled,
+  TeamOutlined
 } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AIChatWidget } from '@/components/ui/AIChatWidget';
 import { useLanguage } from '@/providers/LanguageProvider';
 
@@ -37,19 +38,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     localStorage.setItem('theme', newTheme ? 'dark' : 'light');
   };
 
-  const menuItems = [
-    { key: '/dashboard', icon: <AppstoreOutlined />, label: t('dashboard') || 'Dashboard' },
-    { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },
-    { key: '/search', icon: <SearchOutlined />, label: t('search') || 'Search' },
-  ];
-
-  if (user?.role === 'admin') {
-    menuItems.push({
-      key: '/users',
-      icon: <UserOutlined />,
-      label: 'Quản lý người dùng'
-    });
-  }
+  const menuItems = useMemo(() => {
+    const items: any[] = [
+      { 
+        type: 'group',
+        label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>PLATFORM</span>,
+        children: [
+          { key: '/dashboard', icon: <AppstoreOutlined />, label: t('dashboard') || 'Dashboard' },
+          { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },
+          { key: '/search', icon: <SearchOutlined />, label: t('search') || 'Search' },
+        ]
+      },
+    ];
+    
+    if (user?.role === 'admin') {
+      items.push({
+        type: 'group',
+        label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>ADMINISTRATION</span>,
+        children: [
+          { key: '/users', icon: <TeamOutlined />, label: 'User Management' },
+        ]
+      });
+    }
+    return items;
+  }, [collapsed, user?.role, t]);
 
   const userMenu = {
     items: [
@@ -89,39 +101,80 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           collapsed={collapsed} 
           onCollapse={(value) => setCollapsed(value)}
           theme={isDarkMode ? "dark" : "light"}
+          width={240}
           style={{ 
-            borderRight: isDarkMode ? 'none' : '1px solid #f0f0f0', 
+            borderRight: isDarkMode ? '1px solid #303030' : '1px solid #e2e8f0', 
             position: 'fixed', 
             height: '100vh', 
             left: 0, 
             zIndex: 100,
-            boxShadow: isDarkMode ? '4px 0 10px rgba(0,0,0,0.5)' : 'none'
+            background: isDarkMode ? '#141414' : '#fff',
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 20, color: '#1677ff' }}>
-            {collapsed ? 'P5' : 'DOCUMIND'}
+          <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', fontWeight: 800, fontSize: 18, color: '#0f172a', letterSpacing: '-0.5px' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, fontSize: 16 }}>D</div>
+            {!collapsed && <span>DOCUMIND</span>}
           </div>
-          <Menu 
-            theme={isDarkMode ? "dark" : "light"}
-            mode="inline" 
-            selectedKeys={[pathname]} 
-            items={menuItems} 
-            onClick={({ key }) => router.push(key)}
-          />
+          
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            <Menu 
+              theme={isDarkMode ? "dark" : "light"}
+              mode="inline" 
+              selectedKeys={[pathname]} 
+              items={menuItems} 
+              onClick={({ key }) => router.push(key)}
+              style={{ borderRight: 'none' }}
+            />
+          </div>
+
+          {!collapsed && (
+            <div style={{ 
+              padding: '16px', 
+              borderTop: isDarkMode ? '1px solid #303030' : '1px solid #f1f5f9',
+              background: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#2563eb', flexShrink: 0 }} />
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: isDarkMode ? '#f8fafc' : '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.full_name || 'User'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>{user?.role?.toUpperCase() || 'MEMBER'}</div>
+                </div>
+              </div>
+              <Button 
+                type="text" 
+                block 
+                icon={<LogoutOutlined />} 
+                onClick={logout}
+                style={{ textAlign: 'left', height: 36, borderRadius: 6, fontSize: 13, color: '#ef4444' }}
+              >
+                Sign out
+              </Button>
+            </div>
+          )}
         </Sider>
-        <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'all 0.2s', background: isDarkMode ? '#0a0a0a' : '#f5f7fa' }}>
+        <Layout style={{ marginLeft: collapsed ? 80 : 240, transition: 'all 0.2s', background: isDarkMode ? '#0a0a0a' : '#f8fafc' }}>
           <Header style={{ 
             padding: '0 24px', 
             background: isDarkMode ? '#141414' : '#fff', 
             display: 'flex', 
             justifyContent: 'flex-end', 
             alignItems: 'center', 
-            gap: 16, 
-            borderBottom: isDarkMode ? '1px solid #303030' : '1px solid #f0f0f0',
+            gap: 12, 
+            borderBottom: isDarkMode ? '1px solid #303030' : '1px solid #e2e8f0',
             position: 'sticky',
             top: 0,
-            zIndex: 99
+            zIndex: 99,
+            height: 56,
+            lineHeight: '56px'
           }}>
+            <div style={{ marginRight: 'auto', display: 'flex', alignItems: 'center' }}>
+              {/* Breadcrumb or context could go here */}
+            </div>
+
             <Button 
               type="text" 
               icon={isDarkMode ? <BulbFilled style={{ color: '#faad14' }} /> : <BulbOutlined />} 
@@ -129,17 +182,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             />
 
             <Dropdown menu={langMenu} placement="bottomRight">
-              <Button type="text" icon={<GlobalOutlined />}>
+              <Button type="text" icon={<GlobalOutlined />} style={{ fontSize: 12, fontWeight: 600 }}>
                 {lang === 'vi' ? 'VI' : 'EN'}
               </Button>
             </Dropdown>
             
-            <Dropdown menu={userMenu} placement="bottomRight">
-              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1677ff' }} />
-                <span style={{ fontWeight: 500 }}>{user?.full_name || user?.email || 'User'}</span>
-              </div>
-            </Dropdown>
+            {collapsed && (
+              <Dropdown menu={userMenu} placement="bottomRight">
+                <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#2563eb', cursor: 'pointer' }} size="small" />
+              </Dropdown>
+            )}
           </Header>
           <Content style={{ margin: '24px', padding: 0, minHeight: 280 }}>
             {children}

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = "http://localhost:8000"; 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"; 
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api`,
@@ -51,7 +51,6 @@ export const docService = {
 
   getImageUrl: (path: string) => {
     if (!path) return null;
-    const BASE_URL = "http://localhost:8000";
     if (path.startsWith("http")) return path;
     
     // Nếu path bắt đầu bằng /storage thì nối thẳng BASE_URL

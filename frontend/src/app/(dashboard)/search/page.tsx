@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { Input, Card, List, Tag, Typography, Empty, Space } from 'antd';
 import { SearchOutlined, FileTextOutlined } from '@ant-design/icons';
 import { docService } from '@/services/api';
-import moment from 'moment';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Highlight } from '@/components/ui/Highlight';
+
 
 const { Search } = Input;
 const { Title, Text, Paragraph } = Typography;
@@ -13,22 +15,18 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [searched, setSearched] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState("");
 
   const onSearch = async (value: string) => {
     if (!value.trim()) return;
     setLoading(true);
     setSearched(true);
+    setCurrentQuery(value.trim());
     try {
-      // Vì API searchAI có thể chưa sẵn sàng, ta fetch all và filter ở client (Tương tự code Vite cũ)
-      const res = await docService.getDocs();
-      const items = res.data.items || [];
-      const filtered = items.filter((d: any) => 
-        d.file_name.toLowerCase().includes(value.toLowerCase()) || 
-        (d.summary || "").toLowerCase().includes(value.toLowerCase())
-      );
-      setResults(filtered);
-    } catch (error) {
-      console.error(error);
+      // Call real Gemini-powered semantic search endpoint
+      const res = await docService.searchDocs(value.trim());
+      setResults(res.data.items || []);
+    } catch {
       setResults([]);
     } finally {
       setLoading(false);
@@ -55,7 +53,7 @@ export default function SearchPage() {
       {!searched && (
         <div style={{ marginBottom: 40, textAlign: 'center' }}>
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>Gợi ý chủ đề tìm kiếm (AI Suggested Topics):</Text>
-          <Space wrap justify="center">
+          <Space wrap style={{ width: '100%', justifyContent: 'center' }}>
             <Tag color="cyan" style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 14 }} onClick={() => onSearch("Nghỉ lễ 30/4")}>Nghỉ lễ 30/4</Tag>
             <Tag color="geekblue" style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 14 }} onClick={() => onSearch("Bổ nhiệm cán bộ")}>Bổ nhiệm cán bộ</Tag>
             <Tag color="purple" style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 14 }} onClick={() => onSearch("Mua sắm tài sản")}>Mua sắm tài sản</Tag>
@@ -65,12 +63,22 @@ export default function SearchPage() {
       )}
 
       {searched && !loading && results.length === 0 && (
-        <Empty description="Không tìm thấy văn bản phù hợp" />
+        <EmptyState 
+          type="search" 
+          onAction={() => {
+            setResults([]);
+            setSearched(false);
+            setCurrentQuery("");
+          }}
+          actionText="Xóa tìm kiếm"
+        />
       )}
 
       {results.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <Text strong>Tìm thấy {results.length} văn bản liên quan nhất (AI Reranking)</Text>
+      <Text strong>
+          Tìm thấy {results.length} văn bản — sắp xếp theo độ liên quan (AI Reranking)
+        </Text>
         </div>
       )}
 
@@ -78,25 +86,29 @@ export default function SearchPage() {
         <List
           grid={{ gutter: 16, column: 1 }}
           dataSource={results}
-          renderItem={(item) => (
+          renderItem={(item, index) => (
             <List.Item>
               <Card hoverable size="small" style={{ borderColor: '#e6f4ff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <Space>
                     <FileTextOutlined style={{ color: '#1677ff', fontSize: 20 }} />
-                    <Text strong style={{ fontSize: 16 }}>{item.file_name}</Text>
+                    <Text strong style={{ fontSize: 16 }}>
+                      <Highlight text={item.file_name} query={currentQuery} />
+                    </Text>
                   </Space>
                   <Tag color="blue">{item.category?.toUpperCase() || 'KHÁC'}</Tag>
                 </div>
                 
                 <Paragraph ellipsis={{ rows: 2 }} type="secondary" style={{ background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-                  {item.summary || 'Chưa có nội dung tóm tắt...'}
+                  <Highlight text={item.summary || 'Chưa có nội dung tóm tắt...'} query={currentQuery} />
                 </Paragraph>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, alignItems: 'center' }}>
-                  <Text type="success" strong>Tương đồng {Math.floor(Math.random() * (99 - 85 + 1) + 85)}% (Cosine Similarity)</Text>
+                  <Tag color="blue" style={{ fontWeight: 600 }}>Kết quả #{index + 1}</Tag>
                   <div>
-                    <Text type="secondary" style={{ marginRight: 16 }}>Ngày tạo: {moment(item.created_at).format('DD/MM/YYYY')}</Text>
+                    <Text type="secondary" style={{ marginRight: 16 }}>
+                      Ngày tạo: {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                    </Text>
                     <Text type={item.status === 'verified' ? 'success' : 'warning'} strong>
                       {item.status === 'verified' ? 'Đã xác thực' : 'Đang xử lý'}
                     </Text>
