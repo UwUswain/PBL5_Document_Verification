@@ -220,10 +220,17 @@ class DocumentService:
             final_res = await db.execute(select(Document).where(Document.id.in_(target_ids)))
             return final_res.scalars().all()
         except Exception as e:
-            print(f"❌ Search Error: {e}")
-            # Fallback về search LIKE
-            res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")))
-            return res.scalars().all()
+            print(f"❌ Search Error (Semantic): {e}")
+            # IMPORTANT: Rollback to clear the poisoned transaction before fallback
+            await db.rollback()
+            
+            # Fallback to standard keyword search
+            try:
+                res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")))
+                return res.scalars().all()
+            except Exception as inner_e:
+                print(f"❌ Search Fallback Error: {inner_e}")
+                return []
 
     @staticmethod
     async def delete_document(db: AsyncSession, document_id: str, user_id: uuid.UUID):
@@ -338,8 +345,15 @@ class DocumentService:
             )
             return final_res.scalars().all()
         except Exception as e:
-            print(f"❌ Search Error: {e}")
-            res = await db.execute(
-                select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%"))
-            )
-            return res.scalars().all()
+            print(f"❌ Search Error (Semantic User): {e}")
+            # IMPORTANT: Rollback to clear the poisoned transaction before fallback
+            await db.rollback()
+            
+            try:
+                res = await db.execute(
+                    select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%"))
+                )
+                return res.scalars().all()
+            except Exception as inner_e:
+                print(f"❌ Search Fallback Error (User): {inner_e}")
+                return []
