@@ -84,3 +84,13 @@ async def search_ai_documents(
     total = len(results)
     items = results[offset : offset + limit]
     return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
+
+# 5. Delete Document
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(role_required(["admin"]))
+):
+    await DocumentService.delete_document(db, document_id, current_user.id)
+    return None

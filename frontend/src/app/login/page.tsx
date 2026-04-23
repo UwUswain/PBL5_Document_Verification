@@ -2,22 +2,19 @@
 
 import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { docService } from '@/services/api';
-import { useRouter } from 'next/navigation';
+import { useAuth } from '@/providers/AuthProvider';
 import { useState } from 'react';
 
 const { Title } = Typography;
 
 export default function LoginPage() {
-  const router = useRouter();
+  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const onFinish = async (values: any) => {
     setLoading(true);
     try {
-      await docService.login(values.username, values.password);
-      message.success('Đăng nhập thành công');
-      router.push('/dashboard');
+      await login(values.username, values.password);
     } catch (error) {
       message.error('Tài khoản hoặc mật khẩu không chính xác');
     } finally {

@@ -4,6 +4,7 @@ import "./globals.css";
 import { AntdRegistry } from '@ant-design/nextjs-registry';
 import QueryProvider from "@/providers/QueryProvider";
 import { LanguageProvider } from "@/providers/LanguageProvider";
+import { AuthProvider } from "@/providers/AuthProvider";
 import { ConfigProvider } from 'antd';
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,11 +30,13 @@ export default function RootLayout({
               fontFamily: inter.style.fontFamily,
             }
           }}>
-            <LanguageProvider>
-              <QueryProvider>
-                {children}
-              </QueryProvider>
-            </LanguageProvider>
+            <QueryProvider>
+              <LanguageProvider>
+                <AuthProvider>
+                  {children}
+                </AuthProvider>
+              </LanguageProvider>
+            </QueryProvider>
           </ConfigProvider>
         </AntdRegistry>
       </body>

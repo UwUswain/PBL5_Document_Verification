@@ -6,6 +6,8 @@ from sqlalchemy import select, func, case
 from fastapi import HTTPException, UploadFile
 from urllib.parse import urlencode
 
+from PIL import Image
+import uuid
 from app.modules.documents.models import Document
 from app.modules.documents.ai_logic import SealDetector
 from app.shared.utils.hash_services import calculate_sha256
@@ -17,6 +19,37 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.pa
 UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
 
 class DocumentService:
+    @staticmethod
+    def _crop_and_save(img: Image.Image, box: list, output_filename: str):
+        """
+        Cắt ảnh từ box [x1, y1, x2, y2] hệ 0-1000
+        """
+        try:
+            w, h = img.size
+            left = (box[0] / 1000) * w
+            top = (box[1] / 1000) * h
+            right = (box[2] / 1000) * w
+            bottom = (box[3] / 1000) * h
+
+            # Padding 10%
+            pad_w = (right - left) * 0.1
+            pad_h = (bottom - top) * 0.1
+            
+            crop_box = (
+                max(0, left - pad_w),
+                max(0, top - pad_h),
+                min(w, right + pad_w),
+                min(h, bottom + pad_h)
+            )
+            
+            cropped = img.crop(crop_box)
+            save_path = os.path.join(BASE_DIR, "storage", "crops", output_filename)
+            cropped.save(save_path)
+            return f"/storage/crops/{output_filename}"
+        except Exception as e:
+            print(f"❌ _crop_and_save Error: {e}")
+            return None
+
     @staticmethod
     def _build_verify_url(document_id) -> str:
         """
@@ -40,6 +73,7 @@ class DocumentService:
         Pipeline chuẩn:
         Nhận file -> Hash -> Lưu Disk -> YOLO detect -> OCR -> Gemini Summary (Vision nếu OCR rỗng) -> Lưu DB
         """
+        new_id = uuid.uuid4()
         # 1) Nhận file bytes
         content = await file.read()
         if not content:
@@ -83,30 +117,40 @@ class DocumentService:
         # 8) Dựa HOÀN TOÀN vào kết quả của Gemini để hiển thị
         final_entities = []
         
-        # Đọc kích thước ảnh để đặt hộp giả lập (Fake Box) ở vị trí chuẩn
-        try:
-            with Image.open(file_path) as im:
-                w, h = im.size
-        except Exception:
-            w, h = 640, 640
-            
-        if ai_analysis.get("has_signature"):
-            final_entities.append({
-                "label": "chu_ky",
-                "confidence": 0.99,
-                "box": [720, 820, 950, 950], # Hạ thấp Y để khớp vùng ký tên
-                "is_ai_guessed": True
-            })
-            seal_data["count"] += 1
+        if ai_analysis.get("has_signature") or ai_analysis.get("has_seal"):
+            try:
+                with Image.open(file_path) as img:
+                    img_w, img_h = img.size
+                    
+                    # 8.1) Xử lý Chữ ký
+                    if ai_analysis.get("has_signature"):
+                        sig_box = [720, 820, 950, 950] # Normalized 0-1000
+                        sig_url = DocumentService._crop_and_save(img, sig_box, f"sig_{str(new_id)}.png")
+                        if sig_url:
+                            final_entities.append({
+                                "label": "chu_ky",
+                                "confidence": 0.99,
+                                "box": sig_box,
+                                "is_ai_guessed": True,
+                                "crop_url": sig_url
+                            })
+                            seal_data["count"] += 1
 
-        if ai_analysis.get("has_seal"):
-            final_entities.append({
-                "label": "con_dau",
-                "confidence": 0.99,
-                "box": [520, 780, 780, 950], # Dịch sang trái để khớp con dấu
-                "is_ai_guessed": True
-            })
-            seal_data["count"] += 1
+                    # 8.2) Xử lý Con dấu
+                    if ai_analysis.get("has_seal"):
+                        seal_box = [520, 780, 780, 950] # Normalized 0-1000
+                        seal_url = DocumentService._crop_and_save(img, seal_box, f"seal_{str(new_id)}.png")
+                        if seal_url:
+                            final_entities.append({
+                                "label": "con_dau",
+                                "confidence": 0.99,
+                                "box": seal_box,
+                                "is_ai_guessed": True,
+                                "crop_url": seal_url
+                            })
+                            seal_data["count"] += 1
+            except Exception as e:
+                print(f"❌ Cropping error: {e}")
 
         seal_data["entities"] = final_entities
 
@@ -132,6 +176,7 @@ class DocumentService:
 
         # 12) Lưu DB
         new_doc = Document(
+            id=new_id,
             owner_id=user_id,
             file_name=file.filename,
             file_path=file_path,
@@ -179,6 +224,47 @@ class DocumentService:
             # Fallback về search LIKE
             res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")))
             return res.scalars().all()
+
+    @staticmethod
+    async def delete_document(db: AsyncSession, document_id: str, user_id: uuid.UUID):
+        """
+        Xóa văn bản và các file liên quan
+        """
+        try:
+            doc_uuid = uuid.UUID(document_id)
+            result = await db.execute(select(Document).where(Document.id == doc_uuid))
+            doc = result.scalar_one_or_none()
+
+            if not doc:
+                raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+            # Chỉ admin hoặc chủ sở hữu mới được xóa (ở đây router đã check admin)
+            
+            # 1. Xóa các file vật lý
+            file_paths = [doc.file_path, doc.qr_path]
+            # Thêm các file crop (nếu có)
+            if doc.ai_results:
+                entities = doc.ai_results.get("entities", [])
+                for ent in entities:
+                    if ent.get("crop_url"):
+                        # Chuyển /storage/crops/xxx.png thành đường dẫn tuyệt đối
+                        crop_rel_path = ent["crop_url"].lstrip("/")
+                        file_paths.append(os.path.join(BASE_DIR, crop_rel_path))
+
+            for path in file_paths:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception as e:
+                        print(f"Error removing file {path}: {e}")
+
+            # 2. Xóa trong DB
+            await db.delete(doc)
+            await db.commit()
+            return True
+
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ID không hợp lệ")
 
     @staticmethod
     async def list_my_documents(

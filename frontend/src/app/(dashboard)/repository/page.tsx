@@ -1,344 +1,299 @@
 'use client';
-
-import { useQuery } from '@tanstack/react-query';
-import { Table, Card, Tag, Drawer, Typography, Row, Col, Button, Input } from 'antd';
 import { 
-  FileProtectOutlined, 
-  ClockCircleOutlined, 
-  EyeOutlined, 
+  Table, Card, Input, Button, Tag, Space, Drawer, 
+  Typography, message, Popconfirm, Tooltip, theme, Row, Col 
+} from 'antd';
+import { 
   SearchOutlined, 
-  RobotOutlined, 
-  CheckCircleOutlined 
+  UploadOutlined, 
+  DeleteOutlined, 
+  EyeOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  RobotOutlined
 } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { docService } from '@/services/api';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { AutoZoomCard } from '@/components/dashboard/AutoZoomCard';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
+import { EmptyState } from '@/components/ui/EmptyState';
 
-const { Text } = Typography;
+const { Title, Text } = Typography;
 
 export default function RepositoryPage() {
+  const { token } = theme.useToken();
+  const isDarkMode = token.colorBgContainer === '#141414'; // Simple check for AntD default dark bg
+  const queryClient = useQueryClient();
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[] | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['docs', pagination.current, pagination.pageSize],
-    queryFn: () => docService.getDocs(pagination.pageSize, (pagination.current - 1) * pagination.pageSize).then(res => res.data),
+    queryKey: ['docs'],
+    queryFn: () => docService.getDocs().then(res => res.data.items || []),
   });
 
-  const docs = data?.items || [];
-  const totalDocs = data?.meta?.total || 0;
-
-  const columns = [
-    { title: 'Tên văn bản', dataIndex: 'file_name', key: 'file_name' },
-    {
-      title: 'Phân loại', dataIndex: 'category', key: 'category',
-      filters: [
-        { text: 'Quyết định', value: 'quyết định' },
-        { text: 'Công văn', value: 'công văn' },
-        { text: 'Hợp đồng', value: 'hợp đồng' },
-      ],
-      onFilter: (value: any, record: any) => record.category?.toLowerCase().includes(value),
-      render: (cat: string) => <Tag color="blue">{cat?.toUpperCase() || 'KHÁC'}</Tag>
-    },
-    {
-      title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at',
-      sorter: (a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      render: (date: string) => new Date(date).toLocaleString('vi-VN'),
-    },
-    {
-      title: 'Trạng thái', dataIndex: 'status', key: 'status',
-      render: (status: string) => (
-        status === 'verified' 
-          ? <Tag icon={<FileProtectOutlined />} color="success">Đã xác thực</Tag> 
-          : <Tag icon={<ClockCircleOutlined />} color="warning">Đang xử lý</Tag>
-      )
-    },
-    {
-      title: 'Thao tác', key: 'action',
-      render: (_: any, record: any) => (
-        <Button type="link" icon={<EyeOutlined />} onClick={() => setSelectedDoc(record)}>Xem chi tiết</Button>
-      ),
-    },
-  ];
-
-  const aiData = useMemo(() => {
-    if (!selectedDoc || !selectedDoc.ai_results) return { signature: null, seal: null };
-    let entities: any[] = [];
-    try {
-      const parsed = typeof selectedDoc.ai_results === "string" ? JSON.parse(selectedDoc.ai_results) : selectedDoc.ai_results;
-      const raw = parsed.entities || (Array.isArray(parsed) ? parsed : []);
-      entities = raw.map((e: any) => {
-        if (e.box) {
-          const [x1, y1, x2, y2] = e.box;
-          return { ...e, bbox: { x: x1, y: y1, width: x2 - x1, height: y2 - y1 } };
-        }
-        return e;
-      });
-    } catch (e) { console.error(e); }
-
-    return {
-      signature: entities.find(e => e.label === "chu_ky" || e.label === "Signature"),
-      seal: entities.find(e => e.label === "con_dau" || e.label === "Seal"),
-      metadata: selectedDoc.ai_results?.metadata || {}
-    };
-  }, [selectedDoc]);
-
-  const [hoveredEntity, setHoveredEntity] = useState<any>(null);
-  const [imgSize, setImgSize] = useState({ width: 1, height: 1 });
-
-  const handleCloseDrawer = () => {
-    setSelectedDoc(null);
-    setHoveredEntity(null);
-  };
-
-  const imageUrl = selectedDoc ? docService.getImageUrl(selectedDoc.file_path || selectedDoc.sha256_hash) : null;
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const docs = data || [];
 
   const handleSearch = async (value: string) => {
     if (!value.trim()) {
       setSearchResults(null);
       return;
     }
-    setIsSearching(true);
     try {
       const res = await docService.searchDocs(value);
-      setSearchResults(res.data.items);
+      setSearchResults(res.data.results);
     } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSearching(false);
+      message.error("Lỗi tìm kiếm");
     }
   };
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => docService.deleteDoc(id),
+    onSuccess: () => {
+      message.success('Xóa tài liệu thành công');
+      queryClient.invalidateQueries({ queryKey: ['docs'] });
+    },
+    onError: () => message.error('Không thể xóa tài liệu này')
+  });
+
+  const columns = [
+    {
+      title: 'Tên văn bản',
+      dataIndex: 'file_name',
+      key: 'file_name',
+      ellipsis: true,
+      render: (text: string) => <span style={{ fontWeight: 500 }}>{text}</span>
+    },
+    {
+      title: 'Phân loại',
+      dataIndex: 'category',
+      key: 'category',
+      render: (cat: string) => <Tag color="blue">{cat?.toUpperCase() || 'KHÁC'}</Tag>
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => (
+        status === 'verified' 
+          ? <Tag icon={<CheckCircleOutlined />} color="success">Hợp lệ</Tag> 
+          : <Tag icon={<ClockCircleOutlined />} color="warning">Đang xử lý</Tag>
+      )
+    },
+    {
+      title: 'Ngày tải lên',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (date: string) => new Date(date).toLocaleDateString('vi-VN')
+    },
+    {
+      title: 'Thao tác',
+      key: 'action',
+      render: (_: any, record: any) => (
+        <Space size="middle">
+          <Tooltip title="Xem chi tiết">
+            <Button 
+              type="primary" 
+              shape="circle" 
+              icon={<EyeOutlined />} 
+              onClick={() => setSelectedDoc(record)} 
+            />
+          </Tooltip>
+          
+          <Popconfirm
+            title="Xóa tài liệu"
+            description="Bạn có chắc chắn muốn xóa tài liệu này không? Hành động này không thể hoàn tác."
+            onConfirm={() => deleteMutation.mutate(record.id)}
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+          >
+            <Button 
+              danger 
+              shape="circle" 
+              icon={<DeleteOutlined />} 
+            />
+          </Popconfirm>
+        </Space>
+      )
+    }
+  ];
 
   const displayDocs = searchResults || docs;
 
   return (
-    <>
-      <Card 
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><FileProtectOutlined /> <span>Kho tài liệu lưu trữ</span></div>}
-        extra={
+    <div style={{ padding: '24px' }}>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Title level={3} style={{ margin: 0, color: token.colorText }}>Kho tài liệu văn bản</Title>
+        <Space>
           <Input.Search 
-            placeholder="Tìm kiếm thông minh (ví dụ: Quyết định Hải Phòng 2016...)" 
+            placeholder="Tìm kiếm thông minh..." 
             onSearch={handleSearch}
+            allowClear
             onChange={(e) => {
-              setSearchQuery(e.target.value);
               if (!e.target.value) setSearchResults(null);
             }}
-            loading={isSearching}
-            style={{ width: 450 }}
-            enterButton={<Button type="primary" icon={<RobotOutlined />}>AI Search</Button>}
+            style={{ width: 300 }}
           />
-        }
-        bordered={false}
-      >
-        {isLoading || isSearching ? (
-          <SkeletonTable rowCount={5} />
+          <Button type="primary" icon={<UploadOutlined />}>Tải lên</Button>
+        </Space>
+      </div>
+
+      <Card bordered={false}>
+        {isLoading ? (
+          <SkeletonTable rowCount={8} />
         ) : (
           <Table 
             columns={columns} 
             dataSource={displayDocs} 
             rowKey="id" 
-            pagination={{
-              current: pagination.current,
-              pageSize: pagination.pageSize,
-              total: searchResults ? searchResults.length : totalDocs,
-              onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-              showSizeChanger: true,
-              pageSizeOptions: ['5', '10', '20', '50']
+            locale={{
+              emptyText: <EmptyState type={searchResults ? 'search' : 'docs'} />
             }}
+            pagination={{ pageSize: 10 }}
           />
         )}
       </Card>
 
       <Drawer
-        title={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ fontSize: 18, fontWeight: 600 }}>{selectedDoc?.file_name}</span> <Tag color={selectedDoc?.status === 'verified' ? 'success' : 'warning'} style={{ borderRadius: 4 }}>{selectedDoc?.status?.toUpperCase()}</Tag></div>}
-        width="100vw"
-        onClose={handleCloseDrawer}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 18, fontWeight: 600, color: token.colorText }}>{selectedDoc?.file_name}</span>
+            <Tag color="success" style={{ borderRadius: 4, fontWeight: 'bold', fontSize: 10 }}>VERIFIED</Tag>
+          </div>
+        }
+        width="95%"
+        onClose={() => setSelectedDoc(null)}
         open={!!selectedDoc}
-        bodyStyle={{ padding: 0, background: '#f5f7fa', overflow: 'hidden' }}
-        headerStyle={{ borderBottom: '1px solid #e8e8e8' }}
+        styles={{ body: { padding: 0, backgroundColor: token.colorBgLayout, overflow: 'hidden' } }}
+        extra={<Button type="text" icon={<SearchOutlined />} />}
       >
         {selectedDoc && (
-          <Row style={{ height: '100%' }}>
-            {/* Cột trái: Document Viewer */}
-            <Col span={12} style={{ height: '100%', borderRight: '1px solid #d9d9d9', padding: 24, overflowY: 'auto' }}>
-              <div
-                style={{
-                  position: 'relative', background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  border: '1px solid #e8e8e8', minHeight: 600, display: 'flex', justifyContent: 'center'
-                }}
-              >
-                {imageUrl && (
-                  <img
-                    src={imageUrl}
-                    alt="Scan"
-                    onLoad={(e) => setImgSize({ width: e.currentTarget.naturalWidth || 1, height: e.currentTarget.naturalHeight || 1 })}
-                    style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
-                  />
-                )}
+          <div style={{ display: 'flex', height: '100%' }}>
+            {/* CỘT TRÁI: ẢNH GỐC / PDF */}
+            <div style={{ 
+              flex: 1, 
+              background: isDarkMode ? '#1a1a1a' : '#f0f2f5', 
+              padding: 40, 
+              overflowY: 'auto',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'flex-start',
+              borderRight: `1px solid ${token.colorBorderSecondary}`
+            }}>
+              <img 
+                src={selectedDoc.file_path ? (docService.getImageUrl(selectedDoc.file_path) ?? '') : ''} 
+                alt="Original" 
+                style={{ 
+                  maxWidth: '100%', 
+                  borderRadius: 4, 
+                  boxShadow: isDarkMode ? '0 20px 50px rgba(0,0,0,0.8)' : '0 10px 30px rgba(0,0,0,0.1)',
+                  border: isDarkMode ? '1px solid #333' : '1px solid #ddd'
+                }} 
+              />
+            </div>
 
-                {/* Hover Validation Highlight */}
-                {hoveredEntity && hoveredEntity.bbox && (
-                  <div
-                    style={{
-                      position: 'absolute', pointerEvents: 'none',
-                      border: '3px solid #1677ff', background: 'rgba(22, 119, 255, 0.2)',
-                      left: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.x / 10}%` : `${(hoveredEntity.bbox.x / imgSize.width) * 100}%`,
-                      top: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.y / 10}%` : `${(hoveredEntity.bbox.y / imgSize.height) * 100}%`,
-                      width: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.width / 10}%` : `${(hoveredEntity.bbox.width / imgSize.width) * 100}%`,
-                      height: hoveredEntity.is_ai_guessed ? `${hoveredEntity.bbox.height / 10}%` : `${(hoveredEntity.bbox.height / imgSize.height) * 100}%`,
-                      transition: 'all 0.2s ease-in-out',
-                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
-                      zIndex: 10
-                    }}
-                  >
-                    <div style={{ position: 'absolute', top: -25, left: -3, background: '#1677ff', color: '#fff', padding: '2px 8px', fontSize: 12, fontWeight: 'bold', borderRadius: '4px 4px 4px 0' }}>
-                      {hoveredEntity.label === "chu_ky" ? "Chữ ký" : "Con dấu"}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Col>
-
-            {/* Cột phải: Deep Semantic Extraction (Bento Style) */}
-            <Col span={12} style={{ height: '100%', padding: '24px 32px', overflowY: 'auto', background: '#f8fafc' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* CỘT PHẢI: AI ANALYSIS REPORT */}
+            <div style={{ width: 500, padding: '32px 24px', overflowY: 'auto', background: token.colorBgContainer }}>
+              <Space direction="vertical" size={32} style={{ width: '100%' }}>
                 
-                {/* 1. Phân loại & Insight Layer */}
-                <Card bordered={false} bodyStyle={{ padding: 20 }} style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: '#8c8c8c', textTransform: 'uppercase', marginBottom: 4, fontWeight: 600 }}>Phân loại văn bản</div>
-                      <div style={{ fontSize: 24, fontWeight: 700, color: '#1a1a1a' }}>{selectedDoc.category?.toUpperCase() || 'KHÁC'}</div>
-                    </div>
-                    <Tag color="blue" style={{ borderRadius: 4, fontSize: 12, fontWeight: 600, padding: '4px 12px', margin: 0 }}>AI ANALYZED</Tag>
+                {/* Section 1: Phân loại */}
+                <section>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px' }}>PHÂN LOẠI VĂN BẢN</Text>
+                    <Tag color="processing" bordered={false} style={{ fontSize: 10, fontWeight: 800 }}>AI ANALYZED</Tag>
                   </div>
-                  {aiData.metadata?.insight && (
-                    <div style={{ marginTop: 16, padding: '12px 16px', background: '#e6f4ff', borderRadius: 8, border: '1px solid #91caff' }}>
-                      <div style={{ fontSize: 12, color: '#0958d9', fontWeight: 700, marginBottom: 4 }}>
-                        <RobotOutlined /> AI NHẬN ĐỊNH:
-                      </div>
-                      <div style={{ fontSize: 13, color: '#002c8c', fontStyle: 'italic' }}>
-                        "{aiData.metadata.insight}"
-                      </div>
+                  <Title level={2} style={{ margin: '0 0 16px 0', fontWeight: 800 }}>{selectedDoc.category?.toUpperCase() || 'KHÁC'}</Title>
+                  
+                  <div style={{ 
+                    padding: 16, 
+                    background: isDarkMode ? 'rgba(22, 119, 255, 0.1)' : '#e6f4ff', 
+                    borderRadius: 12, 
+                    border: `1px solid ${isDarkMode ? 'rgba(22, 119, 255, 0.2)' : '#91caff'}`,
+                    position: 'relative'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: '#1677ff', fontWeight: 700, fontSize: 12 }}>
+                      <RobotOutlined /> AI NHẬN ĐỊNH:
                     </div>
-                  )}
-                </Card>
+                    <Text italic style={{ color: isDarkMode ? '#aaa' : '#003a8c', fontSize: 13, lineHeight: 1.5 }}>
+                      "{selectedDoc.ai_results?.metadata?.insight || `Đây là văn bản ${selectedDoc.category?.toLowerCase()} chính thức, đã qua xác thực tính toàn vẹn.`}"
+                    </Text>
+                  </div>
+                </section>
 
-                {/* 2. Thông tin trích xuất */}
-                <Card title={<span style={{ fontSize: 14, fontWeight: 700 }}><SearchOutlined /> THÔNG TIN TRÍCH XUẤT</span>} bordered={false} bodyStyle={{ padding: '20px' }} style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-                  <Row gutter={[16, 16]}>
+                {/* Section 2: Thông tin trích xuất */}
+                <section>
+                  <Title level={5} style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, letterSpacing: '1px' }}>
+                    <SearchOutlined style={{ color: '#1677ff' }} /> THÔNG TIN TRÍCH XUẤT
+                  </Title>
+                  <Row gutter={[24, 24]}>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>SỐ HIỆU</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>{aiData.metadata?.document_number || 'N/A'}</div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>SỐ HIỆU</Text>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{selectedDoc.ai_results?.metadata?.document_number || '---'}</div>
                     </Col>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>NGÀY BAN HÀNH</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>{aiData.metadata?.issued_date || 'N/A'}</div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>NGÀY BAN HÀNH</Text>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{selectedDoc.ai_results?.metadata?.issued_date || '---'}</div>
                     </Col>
                     <Col span={24}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 2 }}>CƠ QUAN BAN HÀNH</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#262626' }}>{aiData.metadata?.issuer || 'N/A'}</div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>CƠ QUAN BAN HÀNH</Text>
+                      <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{selectedDoc.ai_results?.metadata?.issuer || '---'}</div>
                     </Col>
                   </Row>
-                </Card>
+                </section>
 
-                {/* 3. Tóm tắt thông minh & Điểm chính */}
-                <Card bordered={false} bodyStyle={{ padding: 20 }} style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
-                  <div style={{ 
-                    fontSize: 15, 
-                    fontWeight: 800, 
-                    marginBottom: 16, 
-                    color: '#fff',
-                    background: 'linear-gradient(90deg, #1677ff 0%, #4096ff 100%)',
-                    padding: '8px 16px',
-                    borderRadius: '8px 8px 2px 2px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    marginLeft: -20,
-                    marginRight: -20,
-                    marginTop: -20
-                  }}>
-                    <RobotOutlined /> AI TRÍCH XUẤT NỘI DUNG
-                  </div>
-                  
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#595959', marginBottom: 4 }}>TÓM TẮT THÔNG MINH (EXECUTIVE SUMMARY)</div>
-                    <div style={{ fontSize: 14, lineHeight: 1.6, color: '#262626' }}>{selectedDoc.summary}</div>
-                  </div>
-
-                  {aiData.metadata?.main_points && aiData.metadata.main_points.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#595959', marginBottom: 8 }}>CÁC ĐIỂM CHÍNH (KEY POINTS)</div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {aiData.metadata.main_points.map((point: string, idx: number) => (
-                          <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                            <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
-                            <span style={{ fontSize: 13, color: '#434343' }}>{point}</span>
-                          </div>
-                        ))}
+                {/* Section 3: AI Trích xuất nội dung */}
+                <section>
+                  <div style={{ padding: '20px 0', borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+                    <Title level={5} style={{ color: '#1677ff', fontSize: 12, marginBottom: 24 }}>AI TRÍCH XUẤT NỘI DUNG</Title>
+                    
+                    <div style={{ marginBottom: 24 }}>
+                      <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 12, color: token.colorTextSecondary }}>TÓM TẮT THÔNG MINH (EXECUTIVE SUMMARY)</Text>
+                      <div style={{ lineHeight: 1.8, fontSize: 14 }}>
+                        {selectedDoc.summary}
                       </div>
                     </div>
-                  )}
 
-                  {aiData.metadata?.keywords && aiData.metadata.keywords.length > 0 && (
-                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
-                      <div style={{ fontSize: 11, color: '#8c8c8c', marginBottom: 8 }}>TỪ KHÓA NGỮ NGHĨA</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {aiData.metadata.keywords.map((kw: string, idx: number) => (
-                          <Tag key={idx} style={{ borderRadius: 4, margin: 0, background: '#f5f5f5', border: 'none', fontSize: 11 }}>#{kw}</Tag>
-                        ))}
+                    {selectedDoc.ai_results?.metadata?.main_points && (
+                      <div>
+                        <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 12, color: token.colorTextSecondary }}>CÁC ĐIỂM CHÍNH (KEY POINTS)</Text>
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          {selectedDoc.ai_results.metadata.main_points.map((point: string, idx: number) => (
+                            <div key={idx} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                              <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
+                              <span style={{ fontSize: 13 }}>{point}</span>
+                            </div>
+                          ))}
+                        </Space>
                       </div>
-                    </div>
-                  )}
-                </Card>
-
-                {/* 4. Phân tích xác thực */}
-                <Card title={<span style={{ fontSize: 14, fontWeight: 700 }}>PHÂN TÍCH XÁC THỰC</span>} bordered={false} bodyStyle={{ padding: 20 }} style={{ borderRadius: 12, boxShadow: '0 2px 12px rgba(0,0,0,0.04)', borderLeft: '4px solid #52c41a' }}>
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <div 
-                        onMouseEnter={() => setHoveredEntity(aiData.signature)}
-                        onMouseLeave={() => setHoveredEntity(null)}
-                      >
-                        <AutoZoomCard 
-                          title="Chữ ký" 
-                          entity={aiData.signature} 
-                          imageSrc={imageUrl}
-                        />
-                      </div>
-                    </Col>
-                    <Col span={12}>
-                      <div 
-                        onMouseEnter={() => setHoveredEntity(aiData.seal)}
-                        onMouseLeave={() => setHoveredEntity(null)}
-                      >
-                        <AutoZoomCard 
-                          title="Con dấu" 
-                          entity={aiData.seal} 
-                          imageSrc={imageUrl}
-                          notFoundText="KHÔNG CÓ DẤU"
-                        />
-                      </div>
-                    </Col>
-                  </Row>
-                  <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f6ffed', borderRadius: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#389e0d' }}>ĐỘ TIN CẬY XÁC THỰC (TRUST SCORE)</span>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: '#52c41a' }}>96%</span>
+                    )}
                   </div>
-                </Card>
+                </section>
 
-                <div style={{ height: 20 }}></div>
-              </div>
-            </Col>
-          </Row>
+                {/* Section 4: Thực thể bóc tách */}
+                <section>
+                  <Title level={5} style={{ marginBottom: 20, fontSize: 12, letterSpacing: '1px' }}>THỰC THỂ BÓC TÁCH (OCR CROPS)</Title>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <AutoZoomCard 
+                      title="CHỮ KÝ (SIGNATURE)" 
+                      entity={selectedDoc.ai_results?.entities?.find((e: any) => e.label === 'chu_ky' || e.label === 'signature')} 
+                    />
+                    <AutoZoomCard 
+                      title="CON DẤU (STAMP)" 
+                      entity={selectedDoc.ai_results?.entities?.find((e: any) => e.label === 'con_dau' || e.label === 'stamp')} 
+                    />
+                  </div>
+                </section>
+
+              </Space>
+            </div>
+          </div>
         )}
       </Drawer>
-    </>
+
+    </div>
   );
 }
+

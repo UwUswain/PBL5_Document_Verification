@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from uuid import UUID
 from datetime import datetime
 from app.modules.users.models import UserRole # Import cái Enum Role bro đã viết
@@ -12,11 +13,19 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
+    full_name: Optional[str] = None
     role: UserRole
+    is_active: bool
     created_at: datetime
 
     class Config:
         from_attributes = True # SQLAlchemy 2.0 chuẩn
+
+# 2.1 Dữ liệu cập nhật User (Admin dùng)
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
 
 # 3. Dữ liệu khi đăng nhập
 class UserLogin(BaseModel):

@@ -49,21 +49,31 @@ export const docService = {
     return api.post("/docs/upload", formData);
   },
 
-  getImageUrl: (path: string, type = 'uploads') => {
+  getImageUrl: (path: string) => {
     if (!path) return null;
     const BASE_URL = "http://localhost:8000";
     if (path.startsWith("http")) return path;
-
-    const fileName = path.split(/[\\/]/).pop();
-    if (path.includes("qrcodes")) {
-      return `${BASE_URL}/storage/qrcodes/${fileName}`;
+    
+    // Nếu path bắt đầu bằng /storage thì nối thẳng BASE_URL
+    if (path.startsWith('/storage')) {
+      return `${BASE_URL}${path}`;
     }
 
-    const finalFileName = fileName?.includes('.') ? fileName : `${fileName}.png`;
-    return `${BASE_URL}/storage/uploads/${finalFileName}`;
+    // Fallback cho logic cũ nếu path chỉ là tên file
+    const fileName = path.split(/[\\/]/).pop();
+    return `${BASE_URL}/storage/uploads/${fileName}`;
   },
   
   searchDocs: (query: string) => api.get("/docs/search", { params: { query } }),
+  
+  deleteDoc: (id: string) => api.delete(`/docs/${id}`),
+  
+  getProfile: () => api.get("/users/me"),
+
+  // Admin User Management
+  adminGetAllUsers: () => api.get("/users/"),
+  adminUpdateUser: (id: string, data: any) => api.put(`/users/${id}`, data),
+  adminDeleteUser: (id: string) => api.delete(`/users/${id}`),
 
   chat: (message: string) => {
     return api.post("/chat", { message });

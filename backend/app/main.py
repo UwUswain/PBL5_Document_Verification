@@ -28,6 +28,7 @@ STORAGE_PATH = os.path.join(BASE_DIR, "storage")
 # 2. Tự động kiểm tra và tạo folder nếu chưa có (Tránh RuntimeError)
 os.makedirs(os.path.join(STORAGE_PATH, "uploads"), exist_ok=True)
 os.makedirs(os.path.join(STORAGE_PATH, "qrcodes"), exist_ok=True)
+os.makedirs(os.path.join(STORAGE_PATH, "crops"), exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
