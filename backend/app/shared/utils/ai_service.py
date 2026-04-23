@@ -286,34 +286,41 @@ def clean_ocr(text: str) -> str:
     """Làm sạch và chuẩn hóa text OCR trước khi đưa vào Gemini để tránh rác."""
     if not text:
         return ""
-    # 1. Loại bỏ các ký tự đặc biệt rác do OCR nhầm (chỉ giữ l�import asyncio
-import time
+    # 1. Loại bỏ các ký tự đặc biệt rác do OCR nhầm (chỉ giữ lại chữ, số, dấu câu cơ bản)
+    text = re.sub(r'[^\w\s\.,;:\-\(\)\/\%\'\"]', ' ', text)
+    # 2. Xóa khoảng trắng thừa và dấu xuống dòng liên tiếp
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n', text)
+    # 3. Nối các từ bị gãy dòng sai
+    text = re.sub(r'([a-z])\n([a-z])', r'\1 \2', text)
+    return text.strip()
+
+
+import asyncio
+
 
 async def _call_gemini_with_retry(payload, generation_config=None, max_retries=3):
     """
-    Wrapper gọi Gemini Async với cơ chế Retry khi gặp lỗi 429 (Rate Limit).
+    Wrapper gọi Gemini với Retry khi gặp lỗi 429 (Rate Limit).
+    Dùng synchronous generate_content để đảm bảo tương thích SDK cũ.
     """
     for attempt in range(max_retries):
         try:
-            # Sử dụng async version của SDK
             if generation_config:
-                response = await model.generate_content_async(payload, generation_config=generation_config)
+                response = model.generate_content(payload, generation_config=generation_config)
             else:
-                response = await model.generate_content_async(payload)
+                response = model.generate_content(payload)
             return response
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "quota" in err_msg.lower():
-                wait_time = 8 * (attempt + 1) # Tăng dần thời gian chờ: 8s, 16s...
-                # Nếu log có gợi ý thời gian chờ cụ thể, có thể bóc tách ở đây
+                wait_time = 8 * (attempt + 1)  # 8s, 16s, 24s
                 print(f"⚠️ Gemini Rate Limit (429). Thử lại lần {attempt + 1}/{max_retries} sau {wait_time}s...")
                 await asyncio.sleep(wait_time)
                 continue
-            
-            # Nếu là lỗi khác (500, Auth...), log và ném lỗi luôn
             print(f"❌ Gemini API Error: {e}")
             raise e
-    return None
+    raise RuntimeError(f"Gemini API exhausted after {max_retries} retries (rate limit)")
 
 async def analyze_document_content(raw_text: str, image_path: str = None) -> dict:
     """Phân loại và tóm tắt văn bản (Có fallback Vision + Retry logic)"""
@@ -357,20 +364,17 @@ Schema bắt buộc:
             prompt = f"{prompt_template}\n\nNỘI DUNG OCR ĐÃ LÀM SẠCH:\n{clean_text[:3000]}"
             payload = prompt
 
-        gen_config = {
-            "temperature": 0.2,
-            "top_p": 0.8,
-            "response_mime_type": "application/json"
-        }
+        # Plain dict config - không dùng response_mime_type (gây lỗi SDK cũ)
+        gen_config = {"temperature": 0.2, "top_p": 0.8}
 
         # Gọi qua wrapper có retry
         response = await _call_gemini_with_retry(payload, generation_config=gen_config)
 
         # Nếu bị safety block -> thử fallback model (nếu có)
         if response and (fallback_model is not None) and (_response_is_blocked(response) or _finish_reason_is_safety(response)):
-            response = await fallback_model.generate_content_async(
+            response = model.generate_content(
                 payload,
-                generation_config={"temperature": 0.2, "response_mime_type": "application/json"},
+                generation_config={"temperature": 0.2},
             )
 
         raw_out = _response_to_text(response)
@@ -418,27 +422,6 @@ Schema bắt buộc:
 
 async def call_gemini_pure_text(prompt: str) -> str:
     """Hàm chỉ lấy text thô từ Gemini với Retry (Phục vụ AI Search)"""
-    try:
-        response = await _call_gemini_with_retry(prompt)
-        return _response_to_text(response)
-    except Exception as e:
-        print(f"❌ Gemini Pure Text Error: {e}")
-        return ""
-alse, "has_seal": False
-        }
-    except Exception as e:
-        print(f"❌ Gemini Error: {e}")
-        guessed = _guess_category_from_text(raw_text or "")
-        return {
-            "category": guessed,
-            "summary": _rule_based_summary(raw_text or ""),
-            "document_number": "N/A", "issuer": "N/A", "issued_date": "N/A",
-            "main_points": [], "insight": "", "keywords": [],
-            "has_signature": False, "has_seal": False
-        }
-
-async def call_gemini_pure_text(prompt: str) -> str:
-    """Hàm chỉ lấy text thô từ Gemini (Phục vụ AI Search)"""
     try:
         response = model.generate_content(prompt)
         return _response_to_text(response)
