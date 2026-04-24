@@ -23,19 +23,28 @@ COLLECTION_NAME = "pbl5_documents"
 
 _client = None
 _collection = None
-_embedding_func = None
+_bi_encoder = None
+_cross_encoder = None
 
-def get_embedding_function():
-    """Singleton: Chỉ load model AI 1 lần duy nhất để tránh treo 20s mỗi request"""
-    global _embedding_func
-    if _embedding_func is None:
-        start_time = time.time()
-        print("🧠 [Vector] Loading SentenceTransformer model (Warm-up)...")
-        _embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
+def get_bi_encoder():
+    """Bi-Encoder để tạo Vector Embedding (384-dim)"""
+    global _bi_encoder
+    if _bi_encoder is None:
+        print("🧠 [Model] Loading Bi-Encoder (MiniLM-L12)...")
+        _bi_encoder = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="paraphrase-multilingual-MiniLM-L12-v2"
         )
-        print(f"✅ [Vector] Model loaded in {time.time() - start_time:.2f}s")
-    return _embedding_func
+    return _bi_encoder
+
+def get_cross_encoder():
+    """Cross-Encoder để Rerank kết quả (Surgical Accuracy)"""
+    global _cross_encoder
+    if _cross_encoder is None:
+        from sentence_transformers import CrossEncoder
+        print("🚀 [Model] Loading Local Cross-Encoder (Reranker)...")
+        # Model này cực nhẹ và chuyên dụng cho việc xếp hạng lại
+        _cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512)
+    return _cross_encoder
 
 def get_collection():
     global _collection, _client
@@ -45,62 +54,65 @@ def get_collection():
             if _client is None:
                 _client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
             
-            embedding_func = get_embedding_function()
             _collection = _client.get_or_create_collection(
                 name=COLLECTION_NAME,
-                embedding_function=embedding_func
+                embedding_function=get_bi_encoder()
             )
-            print(f"✅ [Chroma] Collection '{COLLECTION_NAME}' ready.")
         except Exception as e:
             print(f"❌ [Chroma] Error: {e}")
             return None
     return _collection
 
-async def add_document_to_vector_db(doc_id: str, text: str, metadata: dict):
-    """Đẩy tác vụ add vào thread pool để không block API"""
-    try:
-        collection = get_collection()
-        if not collection or not text: return False
-        
-        def _add():
-            collection.add(ids=[str(doc_id)], documents=[text], metadatas=[metadata])
-            
-        await asyncio.to_thread(_add)
-        return True
-    except Exception as e:
-        # Tự động reset nếu lệch dimension (Fix phẫu thuật)
-        if "dimension" in str(e).lower():
-            print("⚠️ [Vector] Dimension mismatch. Resetting collection...")
-            global _collection, _client
-            if _client:
-                _client.delete_collection(COLLECTION_NAME)
-                _collection = None
-                return await add_document_to_vector_db(doc_id, text, metadata)
-        print(f"❌ [Vector Add] Error: {e}")
-        return False
-
-async def search_semantic_ids(query: str, n_results: int = 15) -> list[tuple[str, float]]:
-    """Tìm kiếm vector với Timing Logs và Threading"""
-    start_total = time.time()
+async def search_semantic_ids(query: str, n_results: int = 25) -> list[tuple[str, float]]:
+    """Stage 1: Fast Vector Retrieval"""
     try:
         collection = get_collection()
         if not collection: return []
-
-        # Chạy query đồng bộ trong thread riêng để không block FastAPI Event Loop
-        def _query():
-            return collection.query(query_texts=[query], n_results=n_results)
         
-        start_q = time.time()
-        results = await asyncio.to_thread(_query)
-        print(f"🕒 [Timing] Chroma Query took: {time.time() - start_q:.4f}s")
-
+        # Chạy query đồng bộ trong thread riêng
+        results = await asyncio.to_thread(collection.query, query_texts=[query], n_results=n_results)
+        
         if results and results['ids'] and results['distances']:
-            print(f"🕒 [Timing] Total Stage 1 took: {time.time() - start_total:.4f}s")
             return list(zip(results['ids'][0], results['distances'][0]))
         return []
     except Exception as e:
         print(f"❌ [Vector Search] Error: {e}")
         return []
+
+async def local_rerank(query: str, documents: list) -> list:
+    """Stage 2: Local Cross-Encoder Reranking"""
+    if not documents: return []
+    try:
+        model = await asyncio.to_thread(get_cross_encoder)
+        
+        # Tạo cặp (query, doc_content) để reranker đánh giá
+        # Chúng ta dùng summary + một phần raw_text để rerank
+        pairs = [[query, f"{doc.file_name} {doc.summary}"] for doc in documents]
+        
+        scores = await asyncio.to_thread(model.predict, pairs)
+        
+        # Gán điểm và sắp xếp lại
+        for i, doc in enumerate(documents):
+            doc.temp_score = scores[i]
+            
+        # Sắp xếp theo điểm Cross-Encoder (cao nhất lên đầu)
+        documents.sort(key=lambda x: x.temp_score, reverse=True)
+        
+        # Lọc nhiễu: Chỉ lấy những kết quả có điểm rerank > 0 (ngưỡng an toàn)
+        return [doc for doc in documents if doc.temp_score > -2.0]
+    except Exception as e:
+        print(f"⚠️ [Rerank] Error: {e}. Returning original order.")
+        return documents
+
+async def add_document_to_vector_db(doc_id: str, text: str, metadata: dict):
+    try:
+        collection = get_collection()
+        if collection:
+            await asyncio.to_thread(collection.add, ids=[str(doc_id)], documents=[text], metadatas=[metadata])
+            return True
+    except Exception as e:
+        print(f"❌ [Add Vector] Error: {e}")
+        return False
 
 async def delete_from_vector_db(doc_id: str):
     try:
@@ -109,5 +121,5 @@ async def delete_from_vector_db(doc_id: str):
             await asyncio.to_thread(collection.delete, ids=[str(doc_id)])
             return True
     except Exception as e:
-        print(f"❌ [Vector Delete] Error: {e}")
+        print(f"❌ [Delete Vector] Error: {e}")
     return False

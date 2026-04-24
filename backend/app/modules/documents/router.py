@@ -54,7 +54,11 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(role_required(["admin"]))
 ):
-    return await DocumentService.process_upload(file, current_user.id, db)
+    return await DocumentService.create_document_pipeline(
+        db=db,
+        file=file,
+        user_id=current_user.id
+    )
 
 
 # 4. AI Search (FIXED)

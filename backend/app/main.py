@@ -32,10 +32,20 @@ os.makedirs(os.path.join(STORAGE_PATH, "uploads"), exist_ok=True)
 os.makedirs(os.path.join(STORAGE_PATH, "qrcodes"), exist_ok=True)
 os.makedirs(os.path.join(STORAGE_PATH, "crops"), exist_ok=True)
 
+from app.shared.utils.vector_service import get_bi_encoder
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f" {settings.APP_NAME} đang khởi động...")
+    print(f"🚀 {settings.APP_NAME} đang khởi động...")
     await init_db()
+    
+    # Warm up AI model Singleton
+    try:
+        get_bi_encoder()
+        print("✅ AI Bi-Encoder đã sẵn sàng trong bộ nhớ!")
+    except Exception as e:
+        print(f"⚠️ Cảnh báo nạp model AI: {e}")
+        
     yield
     await engine.dispose()
 
