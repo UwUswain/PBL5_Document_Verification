@@ -20,17 +20,13 @@ from app.modules.documents.router import router as doc_router
 
 
 settings = get_settings()
+STORAGE_DIR = settings.STORAGE_DIR
 
-# 1. Xác định đường dẫn gốc của folder backend
-# __file__ là path của main.py, đi ngược lên 2 cấp là tới folder backend/
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__)) # app/
-BASE_DIR = os.path.dirname(CURRENT_DIR) # backend/
-STORAGE_PATH = os.path.join(BASE_DIR, "storage")
-
-# 2. Tự động kiểm tra và tạo folder nếu chưa có (Tránh RuntimeError)
-os.makedirs(os.path.join(STORAGE_PATH, "uploads"), exist_ok=True)
-os.makedirs(os.path.join(STORAGE_PATH, "qrcodes"), exist_ok=True)
-os.makedirs(os.path.join(STORAGE_PATH, "crops"), exist_ok=True)
+# 2. Tự động kiểm tra và tạo folder chuẩn (Single Source of Truth)
+os.makedirs(STORAGE_DIR / "uploads", exist_ok=True)
+os.makedirs(STORAGE_DIR / "qrcodes", exist_ok=True)
+os.makedirs(STORAGE_DIR / "crops", exist_ok=True)
+os.makedirs(STORAGE_DIR / "vector_db", exist_ok=True)
 
 from app.shared.utils.vector_service import get_bi_encoder
 
@@ -55,8 +51,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 3. Mount với đường dẫn tuyệt đối STORAGE_PATH vừa tính được
-app.mount("/storage", StaticFiles(directory=STORAGE_PATH), name="storage")
+# 3. Mount với đường dẫn tuyệt đối chuẩn xác
+app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
 # 3. MIDDLEWARE: Phải nằm TRƯỚC Router để xử lý quyền truy cập
 app.add_middleware(
     CORSMiddleware,

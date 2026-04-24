@@ -15,10 +15,13 @@ from app.shared.utils.qr_services import generate_document_qr
 from app.shared.utils.vector_service import add_document_to_vector_db, delete_from_vector_db, search_semantic_ids, local_rerank
 from app.shared.utils.ocr_service import extract_text_from_image
 from app.shared.utils.ai_service import analyze_document_content
+from app.shared.utils.path_helper import normalize_path
+from app.core.config import get_settings
 
-# Cấu hình lưu trữ
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
+# Cấu hình lưu trữ chuẩn (Single Source of Truth)
+settings = get_settings()
+STORAGE_DIR = settings.STORAGE_DIR
+UPLOAD_DIR = STORAGE_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class DocumentService:
@@ -42,15 +45,11 @@ class DocumentService:
         user_id: uuid.UUID
     ) -> Document:
         """
-        Quy trình xử lý văn bản chuyên sâu (Fix bug missing await).
+        Quy trình xử lý văn bản (Đảm bảo Type Safety cho DB).
         """
         # Đọc nội dung file
         file_content = await file.read()
-        
-        # FIX: Thêm await cho calculate_sha256
         file_hash = await calculate_sha256(file_content)
-        
-        # Quan trọng: Đưa con trỏ file về 0 để các hàm sau (nếu có) vẫn đọc được
         await file.seek(0)
 
         # Kiểm tra trùng lặp
@@ -61,30 +60,52 @@ class DocumentService:
         new_id = uuid.uuid4()
         file_ext = os.path.splitext(file.filename)[1]
         file_name = f"{new_id}{file_ext}"
-        file_path = os.path.join(UPLOAD_DIR, file_name)
+        file_path_obj = UPLOAD_DIR / file_name 
 
         # Lưu file vật lý
-        with open(file_path, "wb") as f:
+        with open(file_path_obj, "wb") as f:
             f.write(file_content)
+            f.flush()
+            os.fsync(f.fileno())
 
-        # Xử lý OCR và AI (Đã có await)
-        extracted_text = await extract_text_from_image(file_path)
-        ai_analysis = await analyze_document_content(extracted_text)
-        seal_data = await SealDetector.detect_stamps(file_path)
+        # CHUẨN HÓA ĐƯỜNG DẪN SANG CHUỖI (Type Safety for DB)
+        abs_file_path = normalize_path(file_path_obj)
+        print(f"🔬 [AI Pipeline] Đang kiểm tra file: {abs_file_path}")
+        
+        # 1. Trích xuất Text (OCR) - Bước cơ bản nhất
+        try:
+            extracted_text = await extract_text_from_image(abs_file_path)
+        except Exception as e:
+            print(f"❌ OCR Pipeline Error: {e}")
+            extracted_text = ""
+
+        # 2. Phân tích nội dung (Gemini)
+        try:
+            ai_context = await analyze_document_content(extracted_text, abs_file_path)
+        except Exception as e:
+            print(f"❌ Gemini AI Error: {e}")
+            ai_context = {"category": "Khác", "summary": "Không thể phân tích nội dung do lỗi AI."}
+        
+        # 3. Nhận diện thị giác (YOLO)
+        try:
+            visual_data = await SealDetector.detect_stamps(abs_file_path)
+        except Exception as e:
+            print(f"❌ Vision AI Error: {e}")
+            visual_data = {"status": "skipped", "count": 0, "entities": []}
         
         final_entities = []
-        if seal_data["status"] == "detected":
+        if visual_data.get("status") == "detected":
             try:
                 from PIL import Image
-                img = Image.open(file_path)
-                CROP_DIR = os.path.join(BASE_DIR, "storage", "crops")
+                img = Image.open(abs_file_path)
+                CROP_DIR = STORAGE_DIR / "crops"
                 os.makedirs(CROP_DIR, exist_ok=True)
 
-                for idx, ent in enumerate(seal_data["entities"]):
+                for idx, ent in enumerate(visual_data["entities"]):
                     box = ent["box"]
                     crop_img = img.crop(box)
                     crop_name = f"crop_{new_id}_{idx}.png"
-                    crop_path = os.path.join(CROP_DIR, crop_name)
+                    crop_path = CROP_DIR / crop_name
                     crop_img.save(crop_path)
                     final_entities.append({
                         "label": ent["label"],
@@ -94,29 +115,46 @@ class DocumentService:
             except Exception as e:
                 print(f"❌ Cropping error: {e}")
 
-        seal_data["entities"] = final_entities
-        seal_data["metadata"] = {
-            "document_number": ai_analysis.get("document_number", "N/A"),
-            "issuer": ai_analysis.get("issuer", "N/A"),
-            "issued_date": ai_analysis.get("issued_date", "N/A"),
-            "main_points": ai_analysis.get("main_points", []),
-            "insight": ai_analysis.get("insight", ""),
-            "keywords": ai_analysis.get("keywords", [])
+        # 3. Decision Engine: Phân tích sự nhất quán giữa CV và NLP
+        has_visual_evidence = visual_data.get("count", 0) > 0
+        doc_category = ai_context.get("category", "Khác")
+        requires_signature = doc_category in ["Công văn", "Hợp đồng", "Quyết định", "Bằng cấp"]
+        
+        # Logic xác thực Deterministic (Chống Hallucination từ Gemini)
+        if has_visual_evidence:
+            final_status = "verified"
+        elif requires_signature and not has_visual_evidence:
+            final_status = "suspicious" # Cảnh báo: Văn bản quan trọng nhưng không thấy dấu/chữ ký
+        else:
+            final_status = "pending"
+
+        # Gộp kết quả AI chuẩn hóa vào Database
+        ai_final_results = {
+            "vision_analysis": {
+                "entities": final_entities,
+                "found_count": visual_data.get("count", 0),
+                "model": "YOLOv8-Seal"
+            },
+            "content_analysis": ai_context, 
+            "verification_logic": {
+                "requires_signature": requires_signature,
+                "has_visual_evidence": has_visual_evidence,
+                "note": "Nghi vấn giả mạo hoặc thiếu dấu" if (requires_signature and not has_visual_evidence) else "Hợp lệ"
+            }
         }
 
-        status = "verified" if (len(extracted_text) > 20 and seal_data.get("count", 0) > 0) else "pending"
-
+        # ĐẢM BẢO CHỈ TRUYỀN STRING VÀO DATABASE
         new_doc = Document(
             id=new_id,
             owner_id=user_id,
             file_name=file.filename,
-            file_path=file_path,
+            file_path=abs_file_path,
             sha256_hash=file_hash,
             raw_text=extracted_text or "Không trích xuất được nội dung.",
-            category=ai_analysis.get("category", "Khác"),
-            summary=ai_analysis.get("summary", "Không có tóm tắt"),
-            ai_results=seal_data,
-            status=status,
+            category=doc_category,
+            summary=ai_context.get("summary", "Không có tóm tắt"),
+            ai_results=ai_final_results,
+            status=final_status,
         )
         db.add(new_doc)
         await db.flush()
@@ -124,10 +162,14 @@ class DocumentService:
         verify_url = DocumentService._build_verify_url(new_doc.id)
         new_doc.qr_path = await generate_document_qr(verify_url, str(new_doc.id))
 
+        # Safety Check trước khi commit
+        assert isinstance(new_doc.file_path, str), f"file_path must be str, got {type(new_doc.file_path)}"
+        assert isinstance(new_doc.qr_path, str), f"qr_path must be str, got {type(new_doc.qr_path)}"
+        
         await db.commit()
         await db.refresh(new_doc)
 
-        # Indexing vào Vector DB (Đã có await)
+        # Indexing vào Vector DB
         try:
             vector_metadata = {"file_name": new_doc.file_name, "category": new_doc.category, "user_id": str(user_id)}
             vector_content = f"{new_doc.summary}\n\n{new_doc.raw_text[:2000]}"
@@ -197,11 +239,13 @@ class DocumentService:
 
             if not doc: raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
             
-            file_paths = [doc.file_path, doc.qr_path]
+            # Xóa file vật lý (Chuẩn hóa đường dẫn trước khi kiểm tra)
+            file_paths = [normalize_path(doc.file_path), normalize_path(doc.qr_path)]
             if doc.ai_results and "entities" in doc.ai_results:
                 for ent in doc.ai_results["entities"]:
                     if ent.get("crop_url"):
-                        file_paths.append(os.path.join(BASE_DIR, ent["crop_url"].lstrip("/")))
+                        relative_path = ent["crop_url"].replace("/storage/", "")
+                        file_paths.append(normalize_path(STORAGE_DIR / relative_path))
 
             for path in file_paths:
                 if path and os.path.exists(path):

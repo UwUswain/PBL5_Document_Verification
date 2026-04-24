@@ -1,5 +1,7 @@
 import os
 import cv2
+import numpy as np
+import asyncio
 
 # --- FIX CRASH PADDLE 3.x ---
 os.environ["FLAGS_use_mkldnn"] = "0"
@@ -23,11 +25,6 @@ def get_ocr_model():
 
 
 def _preprocess_for_ocr(img):
-    """
-    Preprocess ảnh trước OCR:
-    - grayscale để giảm nhiễu màu
-    - resize theo cạnh dài mục tiêu để OCR ổn định/tối ưu tốc độ
-    """
     if img is None:
         return None
 
@@ -62,12 +59,15 @@ def _preprocess_for_ocr(img):
 async def extract_text_from_image(image_path: str) -> str:
     try:
         if not os.path.exists(image_path):
-            print("❌ File không tồn tại")
+            print(f"❌ File không tồn tại: {image_path}")
             return ""
 
-        img = cv2.imread(image_path)
+        # FIX: Hỗ trợ Unicode path trên Windows
+        img_array = np.fromfile(image_path, np.uint8)
+        img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        
         if img is None:
-            print("❌ Không đọc được ảnh")
+            print(f"❌ Không đọc được ảnh (Định dạng không hỗ trợ hoặc file PDF chưa convert): {image_path}")
             return ""
 
         # ✅ Preprocess trước khi đưa vào PaddleOCR (grayscale + resize)
@@ -77,7 +77,9 @@ async def extract_text_from_image(image_path: str) -> str:
             return ""
 
         model = get_ocr_model()
-        result = model.ocr(img)
+        
+        # FIX: Chạy trong thread để không block event loop
+        result = await asyncio.to_thread(model.ocr, img)
 
         if not result or not result[0]:
             print("⚠️ OCR không phát hiện text")
@@ -94,10 +96,8 @@ async def extract_text_from_image(image_path: str) -> str:
         final_output = " ".join(full_text)
 
         print(f"✅ OCR Done: {len(final_output)} chars")
-        print(f"📄 TEXT PREVIEW: {final_output[:150]}")
-
         return final_output
 
     except Exception as e:
-        print(f"⚠️ OCR Error but bypassing: {e}")
+        print(f"⚠️ OCR Error: {e}")
         return ""

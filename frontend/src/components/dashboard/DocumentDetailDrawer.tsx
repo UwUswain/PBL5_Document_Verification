@@ -90,7 +90,7 @@ export function DocumentDetailDrawer({ document, open, onClose }: DocumentDetail
                   <RobotOutlined /> AI NHẬN ĐỊNH:
                 </div>
                 <Text italic style={{ color: isDarkMode ? '#aaa' : '#003a8c', fontSize: 13, lineHeight: 1.5 }}>
-                  "{document.ai_results?.metadata?.insight || `Đây là văn bản ${document.category?.toLowerCase()} chính thức, đã qua xác thực tính toàn vẹn.`}"
+                  "{document.ai_results?.content_analysis?.insight || `Đây là văn bản ${document.category?.toLowerCase()} chính thức, đã qua phân tích và xác thực.`}"
                 </Text>
               </div>
             </section>
@@ -101,18 +101,24 @@ export function DocumentDetailDrawer({ document, open, onClose }: DocumentDetail
                 <SearchOutlined style={{ color: '#1677ff' }} /> THÔNG TIN TRÍCH XUẤT
               </Title>
               <Row gutter={[24, 24]}>
-                <Col span={12}>
-                  <Text type="secondary" style={{ fontSize: 11 }}>SỐ HIỆU</Text>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results?.metadata?.document_number || '---'}</div>
-                </Col>
-                <Col span={12}>
-                  <Text type="secondary" style={{ fontSize: 11 }}>NGÀY BAN HÀNH</Text>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results?.metadata?.issued_date || '---'}</div>
-                </Col>
-                <Col span={24}>
-                  <Text type="secondary" style={{ fontSize: 11 }}>CƠ QUAN BAN HÀNH</Text>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results?.metadata?.issuer || '---'}</div>
-                </Col>
+                {document.ai_results?.content_analysis?.document_number && document.ai_results?.content_analysis?.document_number !== 'N/A' && (
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>SỐ HIỆU</Text>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results.content_analysis.document_number}</div>
+                  </Col>
+                )}
+                {document.ai_results?.content_analysis?.issued_date && document.ai_results?.content_analysis?.issued_date !== 'N/A' && (
+                  <Col span={12}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>NGÀY BAN HÀNH</Text>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results.content_analysis.issued_date}</div>
+                  </Col>
+                )}
+                {document.ai_results?.content_analysis?.issuer && document.ai_results?.content_analysis?.issuer !== 'N/A' && (
+                  <Col span={24}>
+                    <Text type="secondary" style={{ fontSize: 11 }}>CƠ QUAN BAN HÀNH</Text>
+                    <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>{document.ai_results.content_analysis.issuer}</div>
+                  </Col>
+                )}
               </Row>
             </section>
 
@@ -124,15 +130,15 @@ export function DocumentDetailDrawer({ document, open, onClose }: DocumentDetail
                 <div style={{ marginBottom: 24 }}>
                   <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 12, color: token.colorTextSecondary }}>TÓM TẮT THÔNG MINH (EXECUTIVE SUMMARY)</Text>
                   <div style={{ lineHeight: 1.8, fontSize: 14 }}>
-                    {document.summary}
+                    {document.summary || document.ai_results?.content_analysis?.summary_short}
                   </div>
                 </div>
 
-                {document.ai_results?.metadata?.main_points && (
+                {document.ai_results?.content_analysis?.main_points && document.ai_results.content_analysis.main_points.length > 0 && (
                   <div>
                     <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 12, color: token.colorTextSecondary }}>CÁC ĐIỂM CHÍNH (KEY POINTS)</Text>
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                      {document.ai_results.metadata.main_points.map((point: string, idx: number) => (
+                      {document.ai_results.content_analysis.main_points.map((point: string, idx: number) => (
                         <div key={idx} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                           <CheckCircleOutlined style={{ color: '#52c41a', marginTop: 4 }} />
                           <span style={{ fontSize: 13 }}>{point}</span>

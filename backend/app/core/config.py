@@ -1,7 +1,13 @@
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 class Settings(BaseSettings):
+    # 0. System Paths (Single Source of Truth)
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent # backend/
+    STORAGE_DIR: Path = BASE_DIR / "storage"
+    
     # 1. Thông tin chung
     APP_NAME: str = "PBL5 Document Verification AI"
     APP_VERSION: str = "2.0.0"
@@ -19,6 +25,9 @@ class Settings(BaseSettings):
 
     # 5. AI Service (Gemini & Paddle)
     GEMINI_API_KEY: str
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_FALLBACK_MODEL: str = "gemini-1.5-flash"
+    GEMINI_DEBUG: bool = False
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: str = "True"
 
     # CẤU HÌNH QUAN TRỌNG: Chỉ cần dòng này, không cần class Config nữa

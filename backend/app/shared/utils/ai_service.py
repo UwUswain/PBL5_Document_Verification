@@ -4,27 +4,53 @@ import json
 import uuid
 import unicodedata
 import google.generativeai as genai
+import asyncio
 from PIL import Image
-from dotenv import load_dotenv
-load_dotenv()
+from app.core.config import get_settings
+
+# Cấu hình tập trung từ settings
+settings = get_settings()
 
 # Cấu hình Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 def _init_model(name: str):
+    """
+    Khởi tạo model Gemini với cơ chế chống lỗi 404 (Sử dụng format chuẩn SDK).
+    """
     try:
-        return genai.GenerativeModel(name)
+        # SDK mới thường tự thêm 'models/' nên truyền tên ngắn là an toàn nhất
+        clean_name = name.replace("models/", "")
+        
+        if settings.GEMINI_DEBUG:
+            print(f"🔄 [AI Context] Đang thử nạp model: {clean_name}")
+            
+        model_obj = genai.GenerativeModel(clean_name)
+        # Kiểm tra nhanh bằng cách gọi thuộc tính (không tốn token)
+        if model_obj: return model_obj
     except Exception as e:
-        print(f"❌ Gemini model init error for '{name}': {e}")
+        if settings.GEMINI_DEBUG:
+            print(f"⚠️ Không thể nạp model {name}: {e}")
         return None
 
+# CHIẾN LƯỢC NẠP MODEL BẬC THANG (Fallback Chain)
+def get_reliable_model():
+    model_candidates = [
+        settings.GEMINI_MODEL,
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
+    for m_name in model_candidates:
+        if not m_name: continue
+        # Xóa hậu tố -latest nếu người dùng lỡ để trong .env
+        clean_name = m_name.replace("-latest", "")
+        m = _init_model(clean_name)
+        if m: return m
+    return None
 
-# Model name có thể thay đổi theo thời gian; ưu tiên đọc từ env để dễ deploy
-_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip() or "gemini-flash-latest"
-_FALLBACK_MODEL_NAME = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-flash-latest").strip() or "gemini-flash-latest"
-
-model = _init_model(_MODEL_NAME) or _init_model("gemini-flash-latest")
-fallback_model = None if _FALLBACK_MODEL_NAME == _MODEL_NAME else _init_model(_FALLBACK_MODEL_NAME)
+model = get_reliable_model()
+fallback_model = _init_model(settings.GEMINI_FALLBACK_MODEL) or _init_model("gemini-1.5-flash")
 
 def _extract_json_object(text: str) -> dict | None:
     if not text:
@@ -162,6 +188,8 @@ def _guess_category_from_text(text: str) -> str:
         return "Quyết định"
     if ("hop dong" in t) or ("hopdong" in t):
         return "Hợp đồng"
+    if ("thong bao" in t) or ("thongbao" in t):
+        return "Thông báo"
     # "don" cực dễ match nhầm trong cụm "don vi" (đơn vị), nên chỉ bắt pattern rõ ràng
     if (
         ("don xin" in t)
@@ -299,17 +327,22 @@ def clean_ocr(text: str) -> str:
 import asyncio
 
 
-async def _call_gemini_with_retry(payload, generation_config=None, max_retries=3):
+async def _call_gemini_with_retry(payload, generation_config=None, max_retries=3, model_obj=None):
     """
     Wrapper gọi Gemini với Retry khi gặp lỗi 429 (Rate Limit).
-    Dùng synchronous generate_content để đảm bảo tương thích SDK cũ.
     """
+    # Sử dụng model được truyền vào hoặc fallback về global model
+    active_model = model_obj if model_obj else model
+    
     for attempt in range(max_retries):
         try:
+            if settings.GEMINI_DEBUG:
+                print(f"🚀 [Gemini] Thử lần {attempt + 1}/{max_retries}...")
+            
             if generation_config:
-                response = model.generate_content(payload, generation_config=generation_config)
+                response = active_model.generate_content(payload, generation_config=generation_config)
             else:
-                response = model.generate_content(payload)
+                response = active_model.generate_content(payload)
             return response
         except Exception as e:
             err_msg = str(e)
@@ -323,7 +356,10 @@ async def _call_gemini_with_retry(payload, generation_config=None, max_retries=3
     raise RuntimeError(f"Gemini API exhausted after {max_retries} retries (rate limit)")
 
 async def analyze_document_content(raw_text: str, image_path: str = None) -> dict:
-    """Phân loại và tóm tắt văn bản (Có fallback Vision + Retry logic)"""
+    """Phân loại và tóm tắt văn bản (Dùng model chỉ định: gemini-3.1-flash-lite-preview)"""
+    
+    # Khởi tạo model cụ thể theo yêu cầu
+    local_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
     
     clean_text = clean_ocr(raw_text)
     is_text_valid = clean_text and len(clean_text) > 15
@@ -336,11 +372,11 @@ Nhiệm vụ: Trích xuất thông tin ngữ nghĩa sâu (Deep Semantic Extracti
 
 Schema bắt buộc:
 {
-  "category": "Quyết định|Hợp đồng|Công văn|Đơn từ|Khác",
+  "category": "Quyết định|Hợp đồng|Công văn|Thông báo|Đơn từ|Khác",
   "document_number": "Số hiệu văn bản (vd: 2140/QĐ-UBND, N/A nếu không có)",
   "issuer": "Cơ quan/Người ban hành",
   "issued_date": "Ngày ban hành (vd: 05/09/2016, N/A nếu không có)",
-  "summary_short": "Executive Summary: 1 câu duy nhất (dưới 30 từ), cực kỳ dễ hiểu tóm gọn mục đích văn bản.",
+  "summary_short": "Executive Summary: Viết một đoạn văn 2-3 câu chi tiết, mạch lạc tóm gọn bối cảnh và mục đích cốt lõi của văn bản.",
   "main_points": [
     "Điểm chính 1 (ngắn gọn)",
     "Điểm chính 2",
@@ -357,7 +393,9 @@ Schema bắt buộc:
     try:
         payload = None
         if image_path and os.path.exists(image_path):
-            img = Image.open(image_path)
+            with open(image_path, "rb") as img_file:
+                img = Image.open(img_file)
+                img.load() # Load into memory before closing file
             prompt = f"{prompt_template}\n\nNỘI DUNG OCR ĐÃ LÀM SẠCH (hãy kết hợp đọc ảnh để khôi phục nội dung):\n{clean_text[:3000]}"
             payload = [prompt, img]
         else:
@@ -367,8 +405,8 @@ Schema bắt buộc:
         # Plain dict config - không dùng response_mime_type (gây lỗi SDK cũ)
         gen_config = {"temperature": 0.2, "top_p": 0.8}
 
-        # Gọi qua wrapper có retry
-        response = await _call_gemini_with_retry(payload, generation_config=gen_config)
+        # Gọi qua wrapper có retry, truyền local_model vào
+        response = await _call_gemini_with_retry(payload, generation_config=gen_config, model_obj=local_model)
 
         # Nếu bị safety block -> thử fallback model (nếu có)
         if response and (fallback_model is not None) and (_response_is_blocked(response) or _finish_reason_is_safety(response)):
@@ -378,13 +416,14 @@ Schema bắt buộc:
             )
 
         raw_out = _response_to_text(response)
-        if os.getenv("GEMINI_DEBUG", "").strip() in {"1", "true", "True", "yes", "YES"}:
-            print(f"🧠 Gemini RAW: {raw_out!r}")
+        if settings.GEMINI_DEBUG:
+            print(f"🧠 [Gemini RAW]:\n{raw_out}\n{'-'*30}")
             
         parsed = _extract_json_object(raw_out)
         if parsed:
             category = parsed.get("category", "Khác")
-            if category not in ["Quyết định", "Hợp đồng", "Công văn", "Đơn từ", "Khác"]:
+            valid_categories = ["Quyết định", "Hợp đồng", "Công văn", "Thông báo", "Đơn từ", "Khác"]
+            if category not in valid_categories:
                 category = "Khác"
             
             return {

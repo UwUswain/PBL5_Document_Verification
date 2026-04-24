@@ -16,9 +16,12 @@ def load_torch_dlls():
 
 load_torch_dlls()
 
+from app.core.config import get_settings
+
 # --- CẤU HÌNH SINGLETON ---
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-CHROMA_DATA_PATH = os.path.join(BASE_DIR, "storage", "vector_db")
+settings = get_settings()
+STORAGE_DIR = settings.STORAGE_DIR
+CHROMA_DATA_PATH = str(STORAGE_DIR / "vector_db")
 COLLECTION_NAME = "pbl5_documents"
 
 _client = None
