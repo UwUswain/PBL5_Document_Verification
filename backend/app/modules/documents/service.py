@@ -1,160 +1,101 @@
 import os
-import re
-import aiofiles
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
-from fastapi import HTTPException, UploadFile
-from urllib.parse import urlencode
-
-from PIL import Image
 import uuid
+import re
+from typing import List, Optional
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import func, delete, case
+
 from app.modules.documents.models import Document
 from app.modules.documents.ai_logic import SealDetector
 from app.shared.utils.hash_services import calculate_sha256
 from app.shared.utils.qr_services import generate_document_qr
+from app.shared.utils.vector_service import add_document_to_vector_db, delete_from_vector_db
 from app.shared.utils.ocr_service import extract_text_from_image
 from app.shared.utils.ai_service import analyze_document_content
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# Cấu hình lưu trữ
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UPLOAD_DIR = os.path.join(BASE_DIR, "storage", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class DocumentService:
     @staticmethod
-    def _crop_and_save(img: Image.Image, box: list, output_filename: str):
-        """
-        Cắt ảnh từ box [x1, y1, x2, y2] hệ 0-1000
-        """
-        try:
-            w, h = img.size
-            left = (box[0] / 1000) * w
-            top = (box[1] / 1000) * h
-            right = (box[2] / 1000) * w
-            bottom = (box[3] / 1000) * h
-
-            # Padding 10%
-            pad_w = (right - left) * 0.1
-            pad_h = (bottom - top) * 0.1
-            
-            crop_box = (
-                max(0, left - pad_w),
-                max(0, top - pad_h),
-                min(w, right + pad_w),
-                min(h, bottom + pad_h)
-            )
-            
-            cropped = img.crop(crop_box)
-            save_path = os.path.join(BASE_DIR, "storage", "crops", output_filename)
-            cropped.save(save_path)
-            return f"/storage/crops/{output_filename}"
-        except Exception as e:
-            print(f"❌ _crop_and_save Error: {e}")
-            return None
+    def _build_verify_url(doc_id: uuid.UUID) -> str:
+        return f"http://localhost:3000/verify/{doc_id}"
 
     @staticmethod
-    def _build_verify_url(document_id) -> str:
+    async def create_document_pipeline(
+        db: AsyncSession,
+        file: UploadFile,
+        user_id: uuid.UUID
+    ) -> Document:
         """
-        Frontend verify page URL (configurable via env).
-        Example: FRONTEND_VERIFY_URL=http://localhost:5500/frontend/verify.html
+        Quy trình xử lý văn bản:
+        1. Hash & Check trùng
+        2. Lưu file vật lý
+        3. OCR trích xuất chữ
+        4. AI Phân tích (Category, Summary, Entities)
+        5. AI Phát hiện con dấu & Crop
+        6. Lưu DB & Tạo QR
+        7. Index vào Vector DB
         """
-        base = os.getenv("FRONTEND_VERIFY_URL", "http://localhost:5500/frontend/verify.html").strip()
-        if not base:
-            base = "http://localhost:5500/frontend/verify.html"
-        joiner = "&" if "?" in base else "?"
-        return f"{base}{joiner}{urlencode({'id': str(document_id)})}"
+        # 1) Tính Hash và kiểm tra trùng
+        file_content = await file.read()
+        file_hash = calculate_sha256(file_content)
+        await file.seek(0)
 
-    @staticmethod
-    async def process_upload(file: UploadFile, user_id, db: AsyncSession):
-        # Backward-compatible entrypoint
-        return await DocumentService.create_document_pipeline(file=file, user_id=user_id, db=db)
+        existing_doc = await db.execute(select(Document).where(Document.sha256_hash == file_hash))
+        if existing_doc.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Văn bản này đã tồn tại trong hệ thống")
 
-    @staticmethod
-    async def create_document_pipeline(file: UploadFile, user_id, db: AsyncSession):
-        """
-        Pipeline chuẩn:
-        Nhận file -> Hash -> Lưu Disk -> YOLO detect -> OCR -> Gemini Summary (Vision nếu OCR rỗng) -> Lưu DB
-        """
+        # 2) Lưu file vật lý
         new_id = uuid.uuid4()
-        # 1) Nhận file bytes
-        content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="File rỗng hoặc không đọc được.")
+        file_ext = os.path.splitext(file.filename)[1]
+        file_name = f"{new_id}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, file_name)
 
-        # 2) Hash
-        file_hash = await calculate_sha256(content)
+        with open(file_path, "wb") as f:
+            f.write(file_content)
 
-        # 3) Chống trùng trong DB
-        result = await db.execute(select(Document).where(Document.sha256_hash == file_hash))
-        if result.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Văn bản này đã tồn tại trên hệ thống!")
+        # 3) OCR trích xuất nội dung
+        extracted_text = await extract_text_from_image(file_path)
 
-        # 4) Lưu disk
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        ext = os.path.splitext(file.filename or "")[1]
-        file_path = os.path.join(UPLOAD_DIR, f"{file_hash}{ext}")
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(content)
+        # 4) AI Phân tích sâu (Category, Summary, Insight)
+        ai_analysis = await analyze_document_content(extracted_text)
 
-        # 5) TẮT YOLO branch theo yêu cầu của user
-        # Không gọi SealDetector.detect_stamps nữa vì model hiện tại nhận diện ra nhiễu (confidence ~ 0.01)
-        seal_data = {"status": "detected", "count": 0, "entities": []}
-
-        # 6) OCR
-        try:
-            extracted_text = await extract_text_from_image(file_path)
-        except Exception:
-            extracted_text = ""
-        extracted_text = (extracted_text or "").strip()
-
-        # 7) Gemini summary (Hoàn toàn đảm nhận vai trò AI Insight)
-        try:
-            ai_analysis = await analyze_document_content(
-                extracted_text if extracted_text else "",
-                image_path=file_path,
-            )
-        except Exception:
-            ai_analysis = {"category": "Khác", "summary": "Hệ thống đang bận phân tích.", "has_signature": False, "has_seal": False}
-
-        # 8) Dựa HOÀN TOÀN vào kết quả của Gemini để hiển thị
+        # 5) AI Phát hiện con dấu & Crop (Dùng YOLO)
+        seal_data = await SealDetector.detect_stamps(file_path)
         final_entities = []
-        
-        if ai_analysis.get("has_signature") or ai_analysis.get("has_seal"):
-            try:
-                with Image.open(file_path) as img:
-                    img_w, img_h = img.size
-                    
-                    # 8.1) Xử lý Chữ ký
-                    if ai_analysis.get("has_signature"):
-                        sig_box = [720, 820, 950, 950] # Normalized 0-1000
-                        sig_url = DocumentService._crop_and_save(img, sig_box, f"sig_{str(new_id)}.png")
-                        if sig_url:
-                            final_entities.append({
-                                "label": "chu_ky",
-                                "confidence": 0.99,
-                                "box": sig_box,
-                                "is_ai_guessed": True,
-                                "crop_url": sig_url
-                            })
-                            seal_data["count"] += 1
 
-                    # 8.2) Xử lý Con dấu
-                    if ai_analysis.get("has_seal"):
-                        seal_box = [520, 780, 780, 950] # Normalized 0-1000
-                        seal_url = DocumentService._crop_and_save(img, seal_box, f"seal_{str(new_id)}.png")
-                        if seal_url:
-                            final_entities.append({
-                                "label": "con_dau",
-                                "confidence": 0.99,
-                                "box": seal_box,
-                                "is_ai_guessed": True,
-                                "crop_url": seal_url
-                            })
-                            seal_data["count"] += 1
+        if seal_data["status"] == "detected":
+            try:
+                from PIL import Image
+                img = Image.open(file_path)
+                
+                # Tạo folder crops
+                CROP_DIR = os.path.join(BASE_DIR, "storage", "crops")
+                os.makedirs(CROP_DIR, exist_ok=True)
+
+                for idx, ent in enumerate(seal_data["entities"]):
+                    box = ent["box"] # [x1, y1, x2, y2]
+                    crop_img = img.crop(box)
+                    crop_name = f"crop_{new_id}_{idx}.png"
+                    crop_path = os.path.join(CROP_DIR, crop_name)
+                    crop_img.save(crop_path)
+                    
+                    final_entities.append({
+                        "label": ent["label"],
+                        "confidence": ent["confidence"],
+                        "crop_url": f"/storage/crops/{crop_name}"
+                    })
             except Exception as e:
                 print(f"❌ Cropping error: {e}")
 
         seal_data["entities"] = final_entities
 
-        # 9) Đưa siêu dữ liệu vào seal_data để frontend đọc
+        # 6) Đưa siêu dữ liệu vào seal_data để frontend đọc
         seal_data["metadata"] = {
             "document_number": ai_analysis.get("document_number", "N/A"),
             "issuer": ai_analysis.get("issuer", "N/A"),
@@ -164,17 +105,17 @@ class DocumentService:
             "keywords": ai_analysis.get("keywords", [])
         }
 
-        # 10) Chuẩn hoá raw_text lưu DB
+        # 7) Chuẩn hoá raw_text lưu DB
         raw_text_for_db = extracted_text if extracted_text else "Không trích xuất được nội dung rõ ràng từ ảnh quét."
 
-        # 11) Status logic
+        # 8) Status logic
         status = "verified" if (
             len(extracted_text) > 20
             and ai_analysis.get("category") != "Khác"
             and seal_data.get("count", 0) > 0
         ) else "pending"
 
-        # 12) Lưu DB
+        # 9) Lưu DB
         new_doc = Document(
             id=new_id,
             owner_id=user_id,
@@ -190,53 +131,175 @@ class DocumentService:
         db.add(new_doc)
         await db.flush()
 
-        # 11) QR Code
+        # 10) QR Code
         verify_url = DocumentService._build_verify_url(new_doc.id)
         new_doc.qr_path = await generate_document_qr(verify_url, str(new_doc.id))
 
         await db.commit()
         await db.refresh(new_doc)
+
+        # 11) Indexing vào Vector DB (Hybrid Search)
+        try:
+            vector_metadata = {
+                "file_name": new_doc.file_name,
+                "category": new_doc.category,
+                "user_id": str(user_id)
+            }
+            vector_content = f"{new_doc.summary}\n\n{new_doc.raw_text[:2000]}"
+            await add_document_to_vector_db(str(new_doc.id), vector_content, vector_metadata)
+        except Exception as ve:
+            print(f"⚠️ Vector Indexing Warning: {ve}")
+
         return new_doc
 
     @staticmethod
     async def ai_semantic_search(query: str, db: AsyncSession):
-        """Tìm kiếm thông minh dùng Gemini Reranking trên 20 bản ghi mới nhất"""
-        result = await db.execute(select(Document).order_by(Document.created_at.desc()).limit(20))
-        docs = result.scalars().all()
-        if not docs: return []
+        """
+        Hybrid Semantic Search:
+        1. Vector Retrieval (ChromaDB) -> Lấy Top 10 ứng viên
+        2. Gemini Reranking -> Sắp xếp lại dựa trên ngữ cảnh sâu
+        """
+        print(f"🔍 [Semantic Search] Bắt đầu tìm kiếm cho query: '{query}'")
+        try:
+            from app.shared.utils.vector_service import search_semantic_ids
+            from app.shared.utils.ai_service import call_gemini_pure_text
 
-        context = "\n".join([f"ID: {d.id} | Summary: {d.summary}" for d in docs])
-        prompt = f"Danh sách:\n{context}\n\nTìm UUID liên quan nhất đến: '{query}'. Trả về danh sách UUID cách nhau bởi dấu phẩy. Nếu không có, trả về 'None'."
+            # 1. Retrieval: Tìm trong Vector DB
+            candidate_ids = await search_semantic_ids(query, n_results=10)
+            
+            if not candidate_ids:
+                res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")).limit(10))
+                return res.scalars().all()
+
+            # 2. Lấy dữ liệu chi tiết
+            result = await db.execute(select(Document).where(Document.id.in_(candidate_ids)))
+            docs = result.scalars().all()
+            
+            if not docs: return []
+
+            # 3. Reranking
+            context = "\n".join([f"ID: {d.id} | Name: {d.file_name} | Summary: {d.summary}" for d in docs])
+            prompt = f"Rerank danh sách văn bản dựa trên độ liên quan đến: '{query}'. Trả về danh sách UUID cách nhau bởi dấu phẩy.\n\nDanh sách:\n{context}"
+
+            raw_res = await call_gemini_pure_text(prompt)
+            target_ids = re.findall(r'[0-9a-fA-F\-]{36}', raw_res)
+            
+            if not target_ids: return docs
+
+            id_to_doc = {str(d.id): d for d in docs}
+            reranked_docs = [id_to_doc[tid] for tid in target_ids if tid in id_to_doc]
+            for d in docs:
+                if str(d.id) not in target_ids:
+                    reranked_docs.append(d)
+
+            return reranked_docs
+
+        except Exception as e:
+            print(f"❌ [Semantic Search] Lỗi Hybrid Pipeline: {e}")
+            await db.rollback()
+            res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")).limit(10))
+            return res.scalars().all()
+
+    @staticmethod
+    async def ai_semantic_search_for_user(
+        query: str,
+        db: AsyncSession,
+        *,
+        owner_id,
+        candidate_limit: int = 15,
+    ):
+        """
+        AI Hybrid Search tối ưu hiệu năng (Senior Level).
+        """
+        import time
+        import asyncio
+        from app.shared.utils.vector_service import search_semantic_ids
+        from app.shared.utils.ai_service import call_gemini_pure_text
+        
+        start_request = time.time()
+        print(f"🔍 [Search] Bắt đầu xử lý: '{query}'")
 
         try:
-            from app.shared.utils.ai_service import call_gemini_pure_text
-            raw_res = await call_gemini_pure_text(prompt)
-            if "None" in raw_res or not raw_res: return []
+            # --- STAGE 1: Fast Vector Retrieval ---
+            t0 = time.time()
+            raw_candidates = await search_semantic_ids(query, n_results=30)
+            t1 = time.time()
+            print(f"📊 [Telemetry] Stage 1 (Vector) took: {t1 - t0:.4f}s")
 
-            # ✅ FIX: Dùng Regex tìm UUID chuẩn để tránh lỗi split
-            target_ids = re.findall(r'[0-9a-fA-F\-]{36}', raw_res)
-            if not target_ids: return []
-
-            final_res = await db.execute(select(Document).where(Document.id.in_(target_ids)))
-            return final_res.scalars().all()
-        except Exception as e:
-            print(f"❌ Search Error (Semantic): {e}")
-            # IMPORTANT: Rollback to clear the poisoned transaction before fallback
-            await db.rollback()
+            # Ngưỡng tương quan (Threshold)
+            THRESHOLD = 1.2
+            confident_ids = [cid for cid, dist in raw_candidates if dist < THRESHOLD]
             
-            # Fallback to standard keyword search
-            try:
-                res = await db.execute(select(Document).where(Document.file_name.ilike(f"%{query}%")))
+            if not confident_ids:
+                print("ℹ️ [Search] Không có vector đủ tốt, fallback keyword...")
+                res = await db.execute(
+                    select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%")).limit(10)
+                )
                 return res.scalars().all()
-            except Exception as inner_e:
-                print(f"❌ Search Fallback Error: {inner_e}")
-                return []
+
+            # --- STAGE 1.5: Database Fetch ---
+            t2 = time.time()
+            result = await db.execute(
+                select(Document).where(Document.owner_id == owner_id, Document.id.in_(confident_ids))
+            )
+            docs = result.scalars().all()
+            
+            # Giữ nguyên thứ tự ưu tiên từ Vector DB
+            id_to_doc = {str(d.id): d for d in docs}
+            vector_ordered_docs = [id_to_doc[cid] for cid in confident_ids if cid in id_to_doc]
+            t3 = time.time()
+            print(f"📊 [Telemetry] DB Fetch & Order took: {t3 - t2:.4f}s")
+
+            if not vector_ordered_docs: return []
+
+            # --- STAGE 2: Optional Reranking (Guard with 8s Timeout) ---
+            t4 = time.time()
+            try:
+                # Chỉ Rerank tối đa 15 ứng viên tốt nhất để tiết kiệm Token & Time
+                top_candidates = vector_ordered_docs[:15]
+                context = "\n".join([f"ID: {d.id} | Name: {d.file_name} | Summary: {d.summary}" for d in top_candidates])
+                prompt = f"Lọc và rerank UUID liên quan đến: '{query}'. Chỉ trả UUID.\n\n{context}"
+
+                # Thắt chặt timeout xuống 8 giây
+                raw_res = await asyncio.wait_for(call_gemini_pure_text(prompt), timeout=8.0)
+                
+                target_ids = re.findall(r'[0-9a-fA-F\-]{36}', raw_res)
+                if target_ids:
+                    reranked = [id_to_doc[tid] for tid in target_ids if tid in id_to_doc]
+                    if reranked:
+                        print(f"📊 [Telemetry] Stage 2 (Gemini) took: {time.time() - t4:.4f}s")
+                        print(f"✨ [Success] Tổng thời gian xử lý: {time.time() - start_request:.4f}s")
+                        return reranked
+
+            except (asyncio.TimeoutError, Exception) as e:
+                print(f"⚠️ [Rerank] Bỏ qua Stage 2 do: {type(e).__name__}. Dùng kết quả Stage 1.")
+
+            # Trả về kết quả Stage 1 nếu Stage 2 có vấn đề
+            print(f"✅ [Final] Trả về Stage 1 results. Tổng thời gian: {time.time() - start_request:.4f}s")
+            return vector_ordered_docs
+
+        except Exception as e:
+            print(f"❌ [Critical Search Error] {e}")
+            await db.rollback()
+            res = await db.execute(select(Document).where(Document.owner_id == owner_id).limit(5))
+            return res.scalars().all()
+
+        except Exception as e:
+            print(f"❌ [Search Critical Error] {e}")
+            await db.rollback()
+            res = await db.execute(select(Document).where(Document.owner_id == owner_id).limit(5))
+            return res.scalars().all()
+
+        except Exception as e:
+            print(f"❌ [User Search] Lỗi Hybrid Search: {e}")
+            await db.rollback()
+            res = await db.execute(
+                select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%")).limit(10)
+            )
+            return res.scalars().all()
 
     @staticmethod
     async def delete_document(db: AsyncSession, document_id: str, user_id: uuid.UUID):
-        """
-        Xóa văn bản và các file liên quan
-        """
         try:
             doc_uuid = uuid.UUID(document_id)
             result = await db.execute(select(Document).where(Document.id == doc_uuid))
@@ -245,16 +308,11 @@ class DocumentService:
             if not doc:
                 raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
             
-            # Chỉ admin hoặc chủ sở hữu mới được xóa (ở đây router đã check admin)
-            
-            # 1. Xóa các file vật lý
             file_paths = [doc.file_path, doc.qr_path]
-            # Thêm các file crop (nếu có)
             if doc.ai_results:
                 entities = doc.ai_results.get("entities", [])
                 for ent in entities:
                     if ent.get("crop_url"):
-                        # Chuyển /storage/crops/xxx.png thành đường dẫn tuyệt đối
                         crop_rel_path = ent["crop_url"].lstrip("/")
                         file_paths.append(os.path.join(BASE_DIR, crop_rel_path))
 
@@ -265,13 +323,14 @@ class DocumentService:
                     except Exception as e:
                         print(f"Error removing file {path}: {e}")
 
-            # 2. Xóa trong DB
+            await delete_from_vector_db(document_id)
             await db.delete(doc)
             await db.commit()
             return True
-
-        except ValueError:
-            raise HTTPException(status_code=400, detail="ID không hợp lệ")
+        except Exception as e:
+            print(f"❌ Delete Error: {e}")
+            await db.rollback()
+            return False
 
     @staticmethod
     async def list_my_documents(
@@ -282,7 +341,6 @@ class DocumentService:
         offset: int,
     ):
         total = await db.scalar(select(func.count()).select_from(Document).where(Document.owner_id == owner_id))
-
         result = await db.execute(
             select(Document)
             .where(Document.owner_id == owner_id)
@@ -291,69 +349,3 @@ class DocumentService:
             .limit(limit)
         )
         return (total or 0), result.scalars().all()
-
-    @staticmethod
-    async def ai_semantic_search_for_user(
-        query: str,
-        db: AsyncSession,
-        *,
-        owner_id,
-        candidate_limit: int = 50,
-    ):
-        """
-        AI rerank trong phạm vi tài liệu của user (tránh leak + tối ưu SQL).
-        """
-        result = await db.execute(
-            select(Document)
-            .where(Document.owner_id == owner_id)
-            .order_by(Document.created_at.desc())
-            .limit(candidate_limit)
-        )
-        docs = result.scalars().all()
-        if not docs:
-            return []
-
-        context = ""
-        for d in docs:
-            meta = (d.ai_results or {}).get("metadata", {})
-            doc_info = f"ID: {d.id} | No: {meta.get('document_number')} | Issuer: {meta.get('issuer')} | Summary: {d.summary} | Keywords: {', '.join(meta.get('keywords', []))}"
-            context += doc_info + "\n"
-
-        prompt = (
-            f"Hệ thống quản lý văn bản scan AI. Danh sách dữ liệu hiện có:\n{context}\n\n"
-            f"Tìm các UUID liên quan nhất đến yêu cầu tìm kiếm: '{query}'. "
-            "Trả về danh sách UUID cách nhau bởi dấu phẩy, sắp xếp theo độ liên quan giảm dần. "
-            "Nếu không có kết quả nào thực sự liên quan, trả về 'None'."
-        )
-
-        try:
-            from app.shared.utils.ai_service import call_gemini_pure_text
-
-            raw_res = await call_gemini_pure_text(prompt)
-            if not raw_res or "None" in raw_res:
-                return []
-
-            target_ids = re.findall(r"[0-9a-fA-F\-]{36}", raw_res)
-            if not target_ids:
-                return []
-
-            ordering = case({tid: idx for idx, tid in enumerate(target_ids)}, value=Document.id)
-            final_res = await db.execute(
-                select(Document)
-                .where(Document.owner_id == owner_id, Document.id.in_(target_ids))
-                .order_by(ordering)
-            )
-            return final_res.scalars().all()
-        except Exception as e:
-            print(f"❌ Search Error (Semantic User): {e}")
-            # IMPORTANT: Rollback to clear the poisoned transaction before fallback
-            await db.rollback()
-            
-            try:
-                res = await db.execute(
-                    select(Document).where(Document.owner_id == owner_id, Document.file_name.ilike(f"%{query}%"))
-                )
-                return res.scalars().all()
-            except Exception as inner_e:
-                print(f"❌ Search Fallback Error (User): {inner_e}")
-                return []

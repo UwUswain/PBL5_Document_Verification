@@ -1,12 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Input, Card, List, Tag, Typography, Empty, Space, Drawer, Button } from 'antd';
-import { SearchOutlined, FileTextOutlined, ArrowRightOutlined, CheckCircleOutlined, ClockCircleOutlined, EyeOutlined } from '@ant-design/icons';
+import { Input, Card, List, Tag, Typography, Space, Button } from 'antd';
+import { SearchOutlined, FileTextOutlined, ArrowRightOutlined, EyeOutlined } from '@ant-design/icons';
 import { docService } from '@/services/api';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Highlight } from '@/components/ui/Highlight';
-import { AutoZoomCard } from '@/components/dashboard/AutoZoomCard';
+import { DocumentDetailDrawer } from '@/components/dashboard/DocumentDetailDrawer';
 
 
 const { Search } = Input;
@@ -161,66 +161,12 @@ export default function SearchPage() {
         />
       )}
 
-      {/* Detail Discovery Drawer */}
-      <Drawer
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 18, fontWeight: 700 }}>{selectedDoc?.file_name}</span>
-            <Tag color={selectedDoc?.status === 'verified' ? 'success' : 'warning'}>
-              {(selectedDoc?.status || 'PENDING').toUpperCase()}
-            </Tag>
-          </div>
-        }
-        width={600}
-        onClose={() => setSelectedDoc(null)}
+      {/* Document Detail Discovery */}
+      <DocumentDetailDrawer 
+        document={selectedDoc}
         open={!!selectedDoc}
-        styles={{ body: { padding: '24px' } }}
-      >
-        {selectedDoc && (
-          <Space direction="vertical" size={32} style={{ width: '100%' }}>
-            <section>
-              <Title level={5} style={{ fontSize: 12, color: '#64748b', letterSpacing: '1px', marginBottom: 16 }}>AI INSIGHT SUMMARY</Title>
-              <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#334155' }}>
-                {selectedDoc.summary}
-              </Paragraph>
-            </section>
-
-            <section>
-              <Title level={5} style={{ fontSize: 12, color: '#64748b', letterSpacing: '1px', marginBottom: 16 }}>EXTRACTED METADATA</Title>
-              <Card size="small" bordered style={{ background: '#f8fafc', borderRadius: 8 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>SỐ HIỆU</Text>
-                    <div style={{ fontWeight: 700 }}>{selectedDoc.ai_results?.metadata?.document_number || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>NGÀY BAN HÀNH</Text>
-                    <div style={{ fontWeight: 700 }}>{selectedDoc.ai_results?.metadata?.issued_date || 'N/A'}</div>
-                  </div>
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <Text type="secondary" style={{ fontSize: 11 }}>CƠ QUAN BAN HÀNH</Text>
-                    <div style={{ fontWeight: 700 }}>{selectedDoc.ai_results?.metadata?.issuer || 'N/A'}</div>
-                  </div>
-                </div>
-              </Card>
-            </section>
-
-            <section>
-              <Title level={5} style={{ fontSize: 12, color: '#64748b', letterSpacing: '1px', marginBottom: 16 }}>VISUAL EVIDENCE</Title>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <AutoZoomCard 
-                  title="SIGNATURE" 
-                  entity={selectedDoc.ai_results?.entities?.find((e: any) => e.label === 'chu_ky')} 
-                />
-                <AutoZoomCard 
-                  title="SEAL/STAMP" 
-                  entity={selectedDoc.ai_results?.entities?.find((e: any) => e.label === 'con_dau')} 
-                />
-              </div>
-            </section>
-          </Space>
-        )}
-      </Drawer>
+        onClose={() => setSelectedDoc(null)}
+      />
     </div>
   );
 }

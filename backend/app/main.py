@@ -1,4 +1,6 @@
 import os
+# FIX lỗi Protobuf của PaddleOCR và Gemini
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
