@@ -15,12 +15,14 @@ import {
   ArrowRightOutlined,
   ThunderboltOutlined,
   BarChartOutlined,
-  InboxOutlined
+  InboxOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { docService } from '@/services/api';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { DocumentDetailDrawer } from '@/components/dashboard/DocumentDetailDrawer';
 
 const { Title, Text } = Typography;
 
@@ -29,6 +31,7 @@ const COLORS = ['#1677ff', '#faad14', '#52c41a', '#ff4d4f', '#722ed1'];
 export default function DashboardPage() {
   const { token } = theme.useToken();
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState<any>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['docs'],
@@ -36,8 +39,9 @@ export default function DashboardPage() {
   });
 
   const docs = data || [];
-  const verifiedCount = docs.filter((d: any) => d.status === 'verified').length;
-  const pendingCount = docs.filter((d: any) => d.status === 'pending').length;
+  const verifiedCount = docs.filter((d: any) => d.verification_status === 'VERIFIED').length;
+  const suspiciousCount = docs.filter((d: any) => d.verification_status === 'SUSPICIOUS').length;
+  
   const processedToday = docs.filter((d: any) => {
     const today = new Date();
     const docDate = new Date(d.created_at);
@@ -84,11 +88,27 @@ export default function DashboardPage() {
       render: (cat: string) => <Tag color="blue" style={{ borderRadius: 4 }}>{cat?.toUpperCase() || 'KHÁC'}</Tag>
     },
     {
-      title: 'Trạng thái', dataIndex: 'status', key: 'status',
-      render: (status: string) => (
-        status === 'verified' 
+      title: 'Thẩm định', dataIndex: 'verification_status', key: 'verification_status',
+      render: (vStatus: string) => (
+        vStatus === 'VERIFIED' 
           ? <Tag icon={<CheckCircleOutlined />} color="success">Hợp lệ</Tag> 
-          : <Tag icon={<ClockCircleOutlined />} color="warning">Đang xử lý</Tag>
+          : vStatus === 'SUSPICIOUS' 
+            ? <Tag icon={<ClockCircleOutlined />} color="warning">Nghi vấn</Tag>
+            : <Tag color="default">Chờ xử lý</Tag>
+      )
+    },
+    {
+      title: 'Thao tác',
+      key: 'action',
+      render: (_: any, record: any) => (
+        <Button 
+          type="primary" 
+          size="small" 
+          icon={<EyeOutlined />} 
+          onClick={() => setSelectedDoc(record)}
+        >
+          Xem
+        </Button>
       )
     }
   ];
@@ -99,9 +119,9 @@ export default function DashboardPage() {
       <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 24 }}>
         <div>
           <Title level={2} style={{ margin: 0, fontWeight: 800, letterSpacing: '-0.5px', color: '#0f172a' }}>
-            System <span style={{ color: '#2563eb' }}>Dashboard</span>
+            PBL <span style={{ color: '#2563eb' }}>5</span>
           </Title>
-          <Text type="secondary" style={{ fontSize: 16 }}>Enterprise Document Intelligence & Verification</Text>
+          <Text type="secondary" style={{ fontSize: 16 }}>Phân loại, tóm tắt, tìm kiếm văn bản scan sử dụng AI</Text>
         </div>
         
         <div style={{ flex: '1 1 400px', maxWidth: 600 }}>
@@ -202,12 +222,12 @@ export default function DashboardPage() {
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Text type="secondary" strong style={{ fontSize: 13, letterSpacing: '0.025em' }}>PENDING</Text>
+                <Text type="secondary" strong style={{ fontSize: 13, letterSpacing: '0.025em' }}>SUSPICIOUS</Text>
                 <div style={{ color: '#f59e0b', fontSize: 20 }}><ClockCircleOutlined /></div>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 28, fontWeight: 700, color: '#0f172a' }}>{pendingCount}</span>
-                <Text type="warning" style={{ fontSize: 12 }}>đang xử lý</Text>
+                <span style={{ fontSize: 28, fontWeight: 700, color: '#0f172a' }}>{suspiciousCount}</span>
+                <Text type="warning" style={{ fontSize: 12 }}>nghi vấn</Text>
               </div>
             </div>
           </Card>
@@ -285,6 +305,22 @@ export default function DashboardPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* Document Detail Drawer */}
+      <DocumentDetailDrawer 
+        document={selectedDoc}
+        open={!!selectedDoc}
+        onClose={() => setSelectedDoc(null)}
+        onUpdate={() => {
+          refetch();
+          if (selectedDoc) {
+            docService.getDocs().then(res => {
+              const updated = res.data.items?.find((d: any) => d.id === selectedDoc.id);
+              if (updated) setSelectedDoc(updated);
+            });
+          }
+        }}
+      />
 
       {/* AI Pipeline Modal */}
       <Modal 

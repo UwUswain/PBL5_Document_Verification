@@ -89,7 +89,34 @@ async def search_ai_documents(
     items = results[offset : offset + limit]
     return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
 
-# 5. Delete Document
+# 5. Lấy danh sách cần kiểm tra (Admin Only)
+@router.get("/admin/pending-review")
+async def get_pending_review(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(role_required(["admin"]))
+):
+    total, items = await DocumentService.list_pending_review(db, limit, offset)
+    return {"items": items, "meta": {"total": total, "limit": limit, "offset": offset}}
+
+# 6. Xác thực thủ công (Admin Only)
+@router.post("/{document_id}/manual-verify")
+async def manual_verify(
+    document_id: str,
+    file: UploadFile = File(...),
+    label_type: str = Query(..., regex="^(seal|signature)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(role_required(["admin"]))
+):
+    return await DocumentService.manual_verify_document(
+        db=db,
+        doc_id=document_id,
+        crop_file=file,
+        label_type=label_type
+    )
+
+# 7. Delete Document
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: str,

@@ -46,5 +46,6 @@ class Document(Base, UUIDMixin, TimestampMixin):
     ai_results: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     # 6. Trạng thái xử lý hệ thống
-    status: Mapped[str] = mapped_column(String(20), default="pending") 
+    status: Mapped[str] = mapped_column(String(20), default="RECEIVED") 
+    verification_status: Mapped[str] = mapped_column(String(20), default="PENDING")
     # Các trạng thái: pending, ocr_processing, ai_summarizing, completed, error

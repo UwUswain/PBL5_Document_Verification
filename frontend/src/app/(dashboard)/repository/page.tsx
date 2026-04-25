@@ -28,7 +28,7 @@ export default function RepositoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['docs'],
     queryFn: () => docService.getDocs().then(res => res.data.items || []),
   });
@@ -69,17 +69,26 @@ export default function RepositoryPage() {
       title: 'Phân loại',
       dataIndex: 'category',
       key: 'category',
-      render: (cat: string) => <Tag color="blue">{cat?.toUpperCase() || 'KHÁC'}</Tag>
+      render: (cat: string) => <Tag color="blue" style={{ borderRadius: 4 }}>{cat?.toUpperCase() || 'KHÁC'}</Tag>
     },
     {
-      title: 'Trạng thái',
+      title: 'Thẩm định',
+      key: 'verification',
+      render: (_: any, record: any) => {
+        const vStatus = record.verification_status;
+        if (vStatus === 'VERIFIED') return <Tag icon={<CheckCircleOutlined />} color="success">Hợp lệ</Tag>;
+        if (vStatus === 'SUSPICIOUS') return <Tag icon={<ClockCircleOutlined />} color="warning">Nghi vấn</Tag>;
+        return <Tag color="default">Chờ xử lý</Tag>;
+      }
+    },
+    {
+      title: 'Hệ thống',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => (
-        status === 'verified' 
-          ? <Tag icon={<CheckCircleOutlined />} color="success">Hợp lệ</Tag> 
-          : <Tag icon={<ClockCircleOutlined />} color="warning">Đang xử lý</Tag>
-      )
+      render: (status: string) => {
+        const color = status === 'COMPLETED' ? 'blue' : status === 'FAILED' ? 'error' : 'processing';
+        return <Tag bordered={false} color={color}>{status?.toUpperCase() || 'PENDING'}</Tag>;
+      }
     },
     {
       title: 'Ngày tải lên',
@@ -153,9 +162,6 @@ export default function RepositoryPage() {
                 <EmptyState 
                   type={searchResults ? 'search' : 'docs'} 
                   onAction={() => {
-                    // Trigger the same logic as the header upload button if needed, 
-                    // or simply scroll to top/show a message. 
-                    // In a real app, this might open the upload modal directly.
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                 />
@@ -166,11 +172,20 @@ export default function RepositoryPage() {
         )}
       </Card>
 
-      {/* Document Detail Discovery */}
       <DocumentDetailDrawer 
         document={selectedDoc}
         open={!!selectedDoc}
         onClose={() => setSelectedDoc(null)}
+        onUpdate={() => {
+          refetch();
+          // Update selectedDoc to show new data in drawer immediately
+          if (selectedDoc) {
+            docService.getDocs().then(res => {
+              const updated = res.data.items?.find((d: any) => d.id === selectedDoc.id);
+              if (updated) setSelectedDoc(updated);
+            });
+          }
+        }}
       />
     </div>
   );

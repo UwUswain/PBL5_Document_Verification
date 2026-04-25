@@ -1,9 +1,9 @@
 'use client';
 import { Layout, Menu, Button, Dropdown, Avatar, ConfigProvider, theme } from 'antd';
-import { 
-  AppstoreOutlined, 
-  FileTextOutlined, 
-  SearchOutlined, 
+import {
+  AppstoreOutlined,
+  FileTextOutlined,
+  SearchOutlined,
   LogoutOutlined,
   UserOutlined,
   GlobalOutlined,
@@ -40,7 +40,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const menuItems = useMemo(() => {
     const items: any[] = [
-      { 
+      {
         type: 'group',
         label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>PLATFORM</span>,
         children: [
@@ -50,7 +50,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         ]
       },
     ];
-    
+
     if (user?.role === 'admin') {
       items.push({
         type: 'group',
@@ -96,17 +96,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       }}
     >
       <Layout style={{ minHeight: '100vh' }}>
-        <Sider 
-          collapsible 
-          collapsed={collapsed} 
+        <Sider
+          collapsible
+          collapsed={collapsed}
           onCollapse={(value) => setCollapsed(value)}
           theme={isDarkMode ? "dark" : "light"}
           width={240}
-          style={{ 
-            borderRight: isDarkMode ? '1px solid #303030' : '1px solid #e2e8f0', 
-            position: 'fixed', 
-            height: '100vh', 
-            left: 0, 
+          style={{
+            borderRight: isDarkMode ? '1px solid #303030' : '1px solid #e2e8f0',
+            position: 'fixed',
+            height: '100vh',
+            left: 0,
             zIndex: 100,
             background: isDarkMode ? '#141414' : '#fff',
             display: 'flex',
@@ -114,24 +114,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div style={{ height: 64, display: 'flex', alignItems: 'center', padding: '0 24px', fontWeight: 800, fontSize: 18, color: '#0f172a', letterSpacing: '-0.5px' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, fontSize: 16 }}>D</div>
-            {!collapsed && <span>DOCUMIND</span>}
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 4, fontSize: 16 }}>D</div>
+            {!collapsed && <span>OCUMIND</span>}
           </div>
-          
+
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            <Menu 
+            <Menu
               theme={isDarkMode ? "dark" : "light"}
-              mode="inline" 
-              selectedKeys={[pathname]} 
-              items={menuItems} 
+              mode="inline"
+              selectedKeys={[pathname]}
+              items={menuItems}
               onClick={({ key }) => router.push(key)}
               style={{ borderRight: 'none' }}
             />
           </div>
 
           {!collapsed && (
-            <div style={{ 
-              padding: '16px', 
+            <div style={{
+              padding: '16px',
               borderTop: isDarkMode ? '1px solid #303030' : '1px solid #f1f5f9',
               background: isDarkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)'
             }}>
@@ -144,10 +144,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <div style={{ fontSize: 11, color: '#64748b' }}>{user?.role?.toUpperCase() || 'MEMBER'}</div>
                 </div>
               </div>
-              <Button 
-                type="text" 
-                block 
-                icon={<LogoutOutlined />} 
+              <Button
+                type="text"
+                block
+                icon={<LogoutOutlined />}
                 onClick={logout}
                 style={{ textAlign: 'left', height: 36, borderRadius: 6, fontSize: 13, color: '#ef4444' }}
               >
@@ -157,13 +157,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         </Sider>
         <Layout style={{ marginLeft: collapsed ? 80 : 240, transition: 'all 0.2s', background: isDarkMode ? '#0a0a0a' : '#f8fafc' }}>
-          <Header style={{ 
-            padding: '0 24px', 
-            background: isDarkMode ? '#141414' : '#fff', 
-            display: 'flex', 
-            justifyContent: 'flex-end', 
-            alignItems: 'center', 
-            gap: 12, 
+          <Header style={{
+            padding: '0 24px',
+            background: isDarkMode ? '#141414' : '#fff',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 12,
             borderBottom: isDarkMode ? '1px solid #303030' : '1px solid #e2e8f0',
             position: 'sticky',
             top: 0,
@@ -175,9 +175,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               {/* Breadcrumb or context could go here */}
             </div>
 
-            <Button 
-              type="text" 
-              icon={isDarkMode ? <BulbFilled style={{ color: '#faad14' }} /> : <BulbOutlined />} 
+            <Button
+              type="text"
+              icon={isDarkMode ? <BulbFilled style={{ color: '#faad14' }} /> : <BulbOutlined />}
               onClick={toggleTheme}
             />
 
@@ -186,7 +186,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 {lang === 'vi' ? 'VI' : 'EN'}
               </Button>
             </Dropdown>
-            
+
             {collapsed && (
               <Dropdown menu={userMenu} placement="bottomRight">
                 <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#2563eb', cursor: 'pointer' }} size="small" />

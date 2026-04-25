@@ -68,6 +68,17 @@ export const docService = {
   deleteDoc: (id: string) => api.delete(`/docs/${id}`),
   
   getProfile: () => api.get("/users/me"),
+  
+  manualVerify: (docId: string, file: Blob, labelType: string) => {
+    const formData = new FormData();
+    formData.append("file", file, 'manual_crop.png');
+    return api.post(`/docs/${docId}/manual-verify`, formData, {
+      params: { label_type: labelType },
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  getPendingReview: (limit = 20, offset = 0) => api.get("/docs/admin/pending-review", { params: { limit, offset } }),
 
   // Admin User Management
   adminGetAllUsers: () => api.get("/users/"),
