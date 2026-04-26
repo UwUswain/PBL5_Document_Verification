@@ -217,15 +217,56 @@ class DocumentService:
         db: AsyncSession,
         *,
         owner_id,
-        candidate_limit: int = 20,
+        candidate_limit: int = 50,
     ):
-        # ... logic giữ nguyên ...
-        pass
+        """
+        Stage 1: Fast Retrieval từ ChromaDB
+        Stage 2: Rerank local bằng Cross-Encoder
+        """
+        from app.shared.utils.vector_service import search_semantic_ids, local_rerank
+        
+        # 1. Tìm IDs từ ChromaDB
+        results_ids = await search_semantic_ids(query, n_results=candidate_limit)
+        if not results_ids:
+            return []
+            
+        doc_ids = [uuid.UUID(rid[0]) for rid in results_ids]
+        
+        # 2. Lấy data từ Postgres (chỉ lấy của đúng User)
+        stmt = select(Document).where(
+            Document.id.in_(doc_ids),
+            Document.owner_id == owner_id
+        )
+        db_result = await db.execute(stmt)
+        docs = db_result.scalars().all()
+        
+        if not docs:
+            return []
+            
+        # 3. Rerank bằng Cross-Encoder
+        final_docs = await local_rerank(query, list(docs))
+        return final_docs
 
     @staticmethod
     async def delete_document(db: AsyncSession, document_id: str, user_id: uuid.UUID):
-        # ... logic giữ nguyên ...
-        pass
+        from app.shared.utils.vector_service import delete_from_vector_db
+        stmt = select(Document).where(Document.id == uuid.UUID(document_id))
+        result = await db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+        
+        # Xóa file vật lý (tùy chọn, ở đây giữ lại backup hoặc xóa hẳn)
+        # try: os.remove(doc.file_path) except: pass
+        
+        # Xóa khỏi Vector DB
+        await delete_from_vector_db(str(doc.id))
+        
+        # Xóa khỏi Postgres
+        await db.delete(doc)
+        await db.commit()
+        return True
 
     @staticmethod
     async def list_my_documents(db: AsyncSession, owner_id, *, limit: int, offset: int):
