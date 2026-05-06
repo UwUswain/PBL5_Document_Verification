@@ -40,6 +40,10 @@ export const docService = {
     }
     return res.data;
   },
+
+  register: (data: any) => api.post("/auth/register", data),
+  
+  publicVerify: (token: string) => api.get(`/docs/verify/${token}`),
   
   getDocs: (limit = 10, offset = 0) => api.get("/docs", { params: { limit, offset } }),
   

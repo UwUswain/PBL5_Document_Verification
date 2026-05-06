@@ -20,7 +20,7 @@ import {
   FileImageOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
-import { DocumentDetailDrawer } from '@/components/dashboard/DocumentDetailDrawer';
+import { DocumentDetailDrawer } from '@/components/shared/DocumentDetailDrawer';
 import { UploadModalTeal } from '@/components/dashboard/UploadModalTeal';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
 
@@ -49,10 +49,14 @@ export default function DashboardTealPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['docs'],
-    queryFn: () => docService.getDocs(100, 0).then(res => res.data.items || []),
+    queryKey: ['docs', searchQuery],
+    queryFn: () => {
+      if (searchQuery) return docService.searchDocs(searchQuery).then(res => res.data.items || []);
+      return docService.getDocs(100, 0).then(res => res.data.items || []);
+    },
   });
 
   const docs = data || [];
@@ -260,10 +264,12 @@ export default function DashboardTealPage() {
 
           {/* Tools & Buttons */}
           <Space size="middle">
-            <Input 
+            <Input.Search 
               placeholder="Search..." 
-              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />} 
-              style={{ borderRadius: 8, width: 200, background: '#fff', border: '1px solid #cbd5e1' }}
+              onSearch={(val) => setSearchQuery(val)}
+              allowClear
+              enterButton={<SearchOutlined style={{ color: '#008080' }} />}
+              style={{ borderRadius: 8, width: 250, border: '1px solid #cbd5e1' }}
             />
             <Button type="text" icon={<FilterOutlined />} style={{ color: '#64748b' }} />
             <Button type="text" icon={<SettingOutlined />} style={{ color: '#64748b' }} />

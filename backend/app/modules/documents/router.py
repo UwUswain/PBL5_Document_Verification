@@ -31,20 +31,25 @@ async def get_my_documents(
 
 
 # 2. Verify public (QR)
-@router.get("/verify/{document_id}", tags=["Public Verification"], response_model=DocumentOut)
-async def public_verify_document(document_id: str, db: AsyncSession = Depends(get_db)):
-    try:
-        doc_uuid = uuid.UUID(document_id)
-        result = await db.execute(select(Document).where(Document.id == doc_uuid))
-        doc = result.scalar_one_or_none()
+@router.get("/verify/{public_token}", tags=["Public Verification"])
+async def public_verify_document(public_token: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Document).where(Document.public_token == public_token))
+    doc = result.scalar_one_or_none()
 
-        if not doc:
-            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+    if not doc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu xác thực")
 
-        return doc
+    return {
+        "status": doc.verification_status,
+        "ai_results": {
+            "vision": doc.ai_results.get("vision_analysis", {}) if doc.ai_results else {},
+            "nlp": {"category": doc.category}
+        },
+        "raw_text": (doc.raw_text[:300] + "...") if doc.raw_text and len(doc.raw_text) > 300 else doc.raw_text,
+        "created_at": doc.created_at,
+        "image_url": f"/storage/crops/{doc.id}.jpg" # Dummy hoặc cần URL ảnh gốc nếu muốn
+    }
 
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Mã ID không hợp lệ")
 
 
 # 3. Upload
@@ -52,7 +57,7 @@ async def public_verify_document(document_id: str, db: AsyncSession = Depends(ge
 async def upload_document(
     file: UploadFile = File(...), 
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(role_required(["admin"]))
+    current_user: User = Depends(get_current_user)
 ):
     return await DocumentService.create_document_pipeline(
         db=db,

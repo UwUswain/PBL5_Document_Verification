@@ -1,4 +1,5 @@
 import uuid
+import secrets
 from typing import Optional
 from sqlalchemy import String, ForeignKey, JSON, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -30,6 +31,8 @@ class Document(Base, UUIDMixin, TimestampMixin):
     # 3. Bảo mật & Xác thực
     sha256_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     qr_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    public_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, default=lambda: secrets.token_hex(16))
+
     
     # 4. TRỤ CỘT AI (Mới thêm cho Demo tuần tới)
     # Lưu Text thô sau khi chạy OCR (EasyOCR/PaddleOCR) -> Phục vụ tính năng TÌM KIẾM
