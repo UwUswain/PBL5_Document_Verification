@@ -14,6 +14,8 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    avatar_url: Optional[str] = None
     role: UserRole
     is_active: bool
     created_at: datetime
@@ -24,6 +26,8 @@ class UserResponse(BaseModel):
 # 2.1 Dữ liệu cập nhật User (Admin dùng)
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    avatar_url: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
 

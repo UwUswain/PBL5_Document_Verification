@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  Typography, Table, Tag, Button, Input, Dropdown, MenuProps, Space, Badge, ConfigProvider, Tooltip 
+  Typography, Table, Tag, Button, Input, Dropdown, MenuProps, Space, Badge, ConfigProvider, Tooltip, notification 
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -23,6 +23,8 @@ import { docService } from '@/services/api';
 import { DocumentDetailDrawer } from '@/components/shared/DocumentDetailDrawer';
 import { UploadModalTeal } from '@/components/dashboard/UploadModalTeal';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/providers/AuthProvider';
 
 const { Title, Text } = Typography;
 
@@ -50,6 +52,10 @@ export default function DashboardTealPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['docs', searchQuery],
@@ -64,20 +70,31 @@ export default function DashboardTealPage() {
   // Local Filtering
   const filteredDocs = docs.filter((doc: any) => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'verified') return doc.verification_status === 'VERIFIED';
-    if (activeTab === 'suspicious') return doc.verification_status === 'SUSPICIOUS';
-    if (activeTab === 'processing') return !['COMPLETED', 'FAILED'].includes(doc.status);
-    if (activeTab === 'failed') return doc.status === 'FAILED';
+    if (activeTab === 'verified') return doc.verification_status?.toUpperCase() === 'VERIFIED';
+    if (activeTab === 'suspicious') return doc.verification_status?.toUpperCase() === 'SUSPICIOUS';
+    if (activeTab === 'processing') return !['COMPLETED', 'FAILED'].includes(doc.status?.toUpperCase());
+    if (activeTab === 'failed') return doc.status?.toUpperCase() === 'FAILED';
     return true;
   });
 
   const getTabCount = (tabKey: string) => {
     if (tabKey === 'all') return docs.length;
-    if (tabKey === 'verified') return docs.filter((d: any) => d.verification_status === 'VERIFIED').length;
-    if (tabKey === 'suspicious') return docs.filter((d: any) => d.verification_status === 'SUSPICIOUS').length;
-    if (tabKey === 'processing') return docs.filter((d: any) => !['COMPLETED', 'FAILED'].includes(d.status)).length;
-    if (tabKey === 'failed') return docs.filter((d: any) => d.status === 'FAILED').length;
+    if (tabKey === 'verified') return docs.filter((d: any) => d.verification_status?.toUpperCase() === 'VERIFIED').length;
+    if (tabKey === 'suspicious') return docs.filter((d: any) => d.verification_status?.toUpperCase() === 'SUSPICIOUS').length;
+    if (tabKey === 'processing') return docs.filter((d: any) => !['COMPLETED', 'FAILED'].includes(d.status?.toUpperCase())).length;
+    if (tabKey === 'failed') return docs.filter((d: any) => d.status?.toUpperCase() === 'FAILED').length;
     return 0;
+  };
+  
+  const hasSuspicious = docs.some((d: any) => d.verification_status?.toUpperCase() === 'SUSPICIOUS');
+  
+  const formatCategory = (cat: string) => {
+    if (!cat) return 'N/A';
+    const upper = cat.toUpperCase();
+    if (upper.startsWith('CÔN') || upper.startsWith('CON')) return 'Công văn';
+    if (upper.startsWith('QUY')) return 'Quyết định';
+    if (upper.startsWith('THÔ') || upper.startsWith('THO')) return 'Thông báo';
+    return cat.charAt(0).toUpperCase() + cat.slice(1);
   };
 
   const handleUpload = async (options: any) => {
@@ -140,7 +157,7 @@ export default function DashboardTealPage() {
           <Space size="small">
             <Tooltip title={`Category: ${record.category || 'N/A'}`}>
               <Tag color="#f1f5f9" style={{ color: '#475569', margin: 0, border: 'none' }}>
-                {record.category ? record.category.substring(0, 3).toUpperCase() : 'N/A'}
+                {formatCategory(record.category)}
               </Tag>
             </Tooltip>
             {hasSeal && <Tooltip title="Has Seal"><SafetyCertificateFilled style={{ color: '#f59e0b', fontSize: 16 }} /></Tooltip>}
@@ -220,7 +237,7 @@ export default function DashboardTealPage() {
         {/* Header Section */}
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
           <Title level={3} style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>
-            Invoices (US) <span style={{ fontSize: 14, color: '#94a3b8', verticalAlign: 'middle', marginLeft: 8 }}>▼</span>
+            Quản lý Văn bản <span style={{ fontSize: 14, color: '#94a3b8', verticalAlign: 'middle', marginLeft: 8 }}>▼</span>
           </Title>
           
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
@@ -268,11 +285,15 @@ export default function DashboardTealPage() {
               placeholder="Search..." 
               onSearch={(val) => setSearchQuery(val)}
               allowClear
-              enterButton={<SearchOutlined style={{ color: '#008080' }} />}
-              style={{ borderRadius: 8, width: 250, border: '1px solid #cbd5e1' }}
+              enterButton={
+                <Button type="primary" style={{ backgroundColor: '#008080' }}>
+                  <SearchOutlined />
+                </Button>
+              }
+              style={{ borderRadius: 8, width: 250 }}
             />
-            <Button type="text" icon={<FilterOutlined />} style={{ color: '#64748b' }} />
-            <Button type="text" icon={<SettingOutlined />} style={{ color: '#64748b' }} />
+            <Button type="text" icon={<FilterOutlined />} style={{ color: '#64748b' }} onClick={() => notification.info({ message: 'Đang mở Filter', description: 'Tính năng lọc nâng cao đang được phát triển.' })} />
+            <Button type="text" icon={<SettingOutlined />} style={{ color: '#64748b' }} onClick={() => notification.info({ message: 'Settings', description: 'Cài đặt bảng dữ liệu đang được phát triển.' })} />
             <Button 
               type="default" 
               onClick={() => setIsUploadModalOpen(true)}
@@ -280,13 +301,21 @@ export default function DashboardTealPage() {
             >
               Upload
             </Button>
-            <Button 
-              type="primary" 
-              icon={<EyeOutlined />} 
-              style={{ borderRadius: 8, fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0, 128, 128, 0.2)' }}
-            >
-              Review
-            </Button>
+            {isAdmin && (
+              <Button 
+                type="primary" 
+                icon={<EyeOutlined />} 
+                onClick={() => router.push('/repository')}
+                disabled={!hasSuspicious}
+                style={{ 
+                  borderRadius: 8, fontWeight: 600, 
+                  backgroundColor: hasSuspicious ? '#008080' : '#cbd5e1',
+                  boxShadow: hasSuspicious ? '0 4px 6px -1px rgba(0, 128, 128, 0.2)' : 'none' 
+                }}
+              >
+                Review
+              </Button>
+            )}
           </Space>
         </div>
 
