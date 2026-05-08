@@ -71,7 +71,7 @@ export default function VerifyPage({ params }: { params: { token: string } }) {
             marginBottom: 24,
             overflow: 'hidden'
           }}
-          bodyStyle={{ padding: 0 }}
+          styles={{ body: { padding: 0 } }}
         >
           <div style={{ 
             background: isVerified ? '#f0fdf4' : '#fffbeb',

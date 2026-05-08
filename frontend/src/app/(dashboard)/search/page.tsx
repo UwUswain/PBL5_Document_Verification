@@ -104,7 +104,7 @@ export default function SearchPage() {
                     transition: 'all 0.2s ease',
                     overflow: 'hidden'
                   }}
-                  bodyStyle={{ padding: 16 }}
+                  styles={{ body: { padding: 16 } }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <Space size={12}>

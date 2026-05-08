@@ -63,14 +63,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('pbl5_token');
     const isPublicPath = pathname === '/login' || pathname === '/';
 
-    if (!token && !user) {
+    if (!token) {
       if (!isPublicPath) {
         router.push('/login');
       }
-    } else if (user) {
-      if (pathname === '/login') {
+    } else {
+      // Có token
+      if (user && isPublicPath) {
         router.push('/dashboard');
       }
+      // Nếu có token mà chưa có user (đang fetchUser), ta không làm gì, chỉ việc chờ.
     }
   }, [pathname, user, initialized, router]);
 
@@ -85,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(profileRes.data);
       
       message.success('Chào mừng bạn quay trở lại!');
-      router.push('/dashboard');
+      // XÓA BỎ router.push('/dashboard') Ở ĐÂY ĐỂ TRÁNH DOUBLE NAVIGATE
     } catch (err) {
       throw err; // Ném lỗi ra để LoginPage catch và show message
     }

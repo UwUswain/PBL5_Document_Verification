@@ -33,7 +33,7 @@ def get_bi_encoder():
     """Bi-Encoder để tạo Vector Embedding (384-dim)"""
     global _bi_encoder
     if _bi_encoder is None:
-        print("🧠 [Model] Loading Bi-Encoder (MiniLM-L12)...")
+        print(" [Model] Loading Bi-Encoder (MiniLM-L12)...")
         _bi_encoder = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="paraphrase-multilingual-MiniLM-L12-v2"
         )

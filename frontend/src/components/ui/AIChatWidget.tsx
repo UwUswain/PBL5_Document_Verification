@@ -52,7 +52,7 @@ export function AIChatWidget() {
     <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999 }}>
       {isOpen ? (
         <Card 
-          bodyStyle={{ padding: 0 }}
+          styles={{ body: { padding: 0 } }}
           style={{ 
             width: 350, 
             height: 500, 

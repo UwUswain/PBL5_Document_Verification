@@ -58,7 +58,7 @@ const TABS = [
 function StatCard({ label, value, subtext, icon: Icon, color, bg }: any) {
   return (
     <Card 
-      bodyStyle={{ padding: 24 }} 
+      styles={{ body: { padding: 24 } }}
       style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -401,7 +401,7 @@ export default function DashboardTealPage() {
               {/* Left Column: Documents Table */}
               <div style={{ flex: '2 1 600px', minWidth: 0 }}>
                 <Card 
-                  bodyStyle={{ padding: 0 }} 
+                  styles={{ body: { padding: 0 } }}
                   style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)', overflow: 'hidden' }}
                 >
                   <div style={{ borderBottom: '1px solid #e2e8f0', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -464,7 +464,7 @@ export default function DashboardTealPage() {
                       dataSource={filteredDocs} 
                       rowKey="id" 
                       pagination={{
-                        position: ['bottomRight'],
+                        placement: ['bottomRight'],
                         pageSize: 5,
                         showSizeChanger: false,
                         style: { padding: '16px 24px', margin: 0 }
@@ -478,7 +478,7 @@ export default function DashboardTealPage() {
               <div style={{ flex: '1 1 300px', minWidth: 0 }}>
                 <Card 
                   style={{ borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)' }}
-                  bodyStyle={{ padding: 24 }}
+                  styles={{ body: { padding: 24 } }}
                 >
                   <h2 style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', margin: '0 0 24px 0' }}>Recent Activity</h2>
                   

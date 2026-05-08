@@ -40,7 +40,7 @@ export const UploadModalTeal: React.FC<UploadModalTealProps> = ({
         width={600}
         centered
         closable={!isUploading}
-        maskClosable={!isUploading}
+        mask={{ closable: !isUploading }}
         styles={{
           mask: {
             backdropFilter: 'blur(8px)',

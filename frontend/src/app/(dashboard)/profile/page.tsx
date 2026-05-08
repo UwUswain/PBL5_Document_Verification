@@ -125,7 +125,7 @@ export default function ProfilePage() {
         <Col xs={24} md={16}>
           <Card 
             style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: 24, border: 'none' }}
-            bodyStyle={{ padding: 32 }}
+            styles={{ body: { padding: 32 } }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32 }}>
               <div style={{ position: 'relative' }}>
