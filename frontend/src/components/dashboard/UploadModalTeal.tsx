@@ -46,7 +46,7 @@ export const UploadModalTeal: React.FC<UploadModalTealProps> = ({
             backdropFilter: 'blur(8px)',
             backgroundColor: 'rgba(15, 23, 42, 0.4)', // Darker translucent mask to make the light modal pop
           },
-          content: {
+          body: {
             padding: 24,
             borderRadius: 16,
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',

@@ -11,6 +11,8 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem("pbl5_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      // Lưu lại token được dùng cho request này để đối chiếu khi có lỗi 401
+      (config as any)._token = token;
     }
   }
   return config;
@@ -20,9 +22,23 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
+      // Bỏ qua lỗi 401 từ endpoint login (vd: sai mật khẩu)
+      if (error.config?.url?.includes('/auth/login')) {
+        return Promise.reject(error);
+      }
+
       if (typeof window !== 'undefined') {
-        localStorage.removeItem("pbl5_token");
-        window.location.href = "/login";
+        const currentToken = localStorage.getItem("pbl5_token");
+        const requestToken = (error.config as any)?._token;
+
+        // Chỉ xoá token và redirect nếu token gây lỗi CHÍNH LÀ token hiện hành.
+        // Nếu khác (do vừa login thành công), thì bỏ qua để không phá flow login.
+        if (currentToken === requestToken) {
+          localStorage.removeItem("pbl5_token");
+          if (window.location.pathname !== "/login") {
+            window.location.href = "/login";
+          }
+        }
       }
     }
     return Promise.reject(error);

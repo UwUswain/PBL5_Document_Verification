@@ -1,6 +1,6 @@
 'use client';
 
-import { Form, Input, Button, Card, Typography, message } from 'antd';
+import { Form, Input, Button, Card, Typography, App } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useAuth } from '@/providers/AuthProvider';
 import { useState } from 'react';
@@ -10,6 +10,7 @@ const { Title } = Typography;
 export default function LoginPage() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
+  const { message } = App.useApp();
 
   const onFinish = async (values: any) => {
     setLoading(true);

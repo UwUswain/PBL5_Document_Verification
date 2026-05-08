@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { docService } from '@/services/api';
-import { message } from 'antd';
+import { App } from 'antd';
 
 interface User {
   id: string;
@@ -25,49 +25,69 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
+  
   const router = useRouter();
   const pathname = usePathname();
+  const { message } = App.useApp();
 
+  // 1. Hydration Effect: Chạy đúng 1 lần khi ứng dụng khởi động
   useEffect(() => {
-    const initAuth = async () => {
+    const fetchUser = async () => {
       const token = localStorage.getItem('pbl5_token');
-      const isPublicPath = pathname === '/login';
-
       if (!token) {
-        if (!isPublicPath) router.push('/login');
         setLoading(false);
+        setInitialized(true);
         return;
       }
 
       try {
-        // Giả sử có endpoint getProfile, nếu chưa có tôi sẽ tạm thời mock từ localStorage
-        // hoặc dùng dữ liệu từ token. Hiện tại tôi sẽ lấy từ API nếu có.
-        const res = await docService.getProfile(); 
+        const res = await docService.getProfile();
         setUser(res.data);
-        if (isPublicPath) router.push('/dashboard');
       } catch (err) {
-        console.error('Auth Init Error:', err);
+        // Token hết hạn hoặc lỗi mạng
         localStorage.removeItem('pbl5_token');
-        if (!isPublicPath) router.push('/login');
       } finally {
         setLoading(false);
+        setInitialized(true);
       }
     };
 
-    initAuth();
-  }, [pathname, router]);
+    fetchUser();
+  }, []);
+
+  // 2. Route Protection Effect: Lắng nghe pathname và user state để điều hướng
+  useEffect(() => {
+    if (!initialized) return;
+
+    const token = localStorage.getItem('pbl5_token');
+    const isPublicPath = pathname === '/login' || pathname === '/';
+
+    if (!token && !user) {
+      if (!isPublicPath) {
+        router.push('/login');
+      }
+    } else if (user) {
+      if (pathname === '/login') {
+        router.push('/dashboard');
+      }
+    }
+  }, [pathname, user, initialized, router]);
 
   const login = async (email: string, pass: string) => {
     try {
       const res = await docService.login(email, pass);
+      // Lưu token lại ngay
       localStorage.setItem('pbl5_token', res.data.access_token);
-      // Lấy profile ngay sau khi login
+      
+      // Fetch profile mới nhất
       const profileRes = await docService.getProfile();
       setUser(profileRes.data);
+      
       message.success('Chào mừng bạn quay trở lại!');
       router.push('/dashboard');
     } catch (err) {
-      throw err;
+      throw err; // Ném lỗi ra để LoginPage catch và show message
     }
   };
 
