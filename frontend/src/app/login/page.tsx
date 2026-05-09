@@ -57,6 +57,15 @@ export default function LoginPage() {
             </Button>
           </Form.Item>
         </Form>
+
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <Typography.Text style={{ color: '#8c8c8c' }}>
+            Chưa có tài khoản?{' '}
+            <a href="/register" style={{ color: '#1677ff', fontWeight: 500 }}>
+              Đăng ký ngay
+            </a>
+          </Typography.Text>
+        </div>
       </Card>
     </div>
   );

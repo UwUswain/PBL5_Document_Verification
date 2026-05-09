@@ -372,21 +372,21 @@ export default function DashboardTealPage() {
             />
             <StatCard 
               label="Processing Success Rate" 
-              value={docs.length > 0 ? `${((docs.filter(d => d.status === 'COMPLETED').length / docs.length) * 100).toFixed(1)}%` : '0%'} 
+              value={docs.length > 0 ? `${((docs.filter((d: any) => d.status === 'COMPLETED').length / docs.length) * 100).toFixed(1)}%` : '0%'} 
               subtext="Tỷ lệ xử lý AI thành công" 
               icon={LineChartOutlined} 
               color="#008080" bg="#ccfbf1" 
             />
             <StatCard 
               label="Pending Verification" 
-              value={docs.filter(d => d.verification_status?.toUpperCase() === 'SUSPICIOUS').length.toString()} 
+              value={docs.filter((d: any) => d.verification_status?.toUpperCase() === 'SUSPICIOUS').length.toString()} 
               subtext="Cần kiểm duyệt thủ công" 
               icon={ClockCircleOutlined} 
               color="#d97706" bg="#fef3c7" 
             />
             <StatCard 
               label="Extraction Errors" 
-              value={docs.filter(d => d.status === 'FAILED').length.toString()} 
+              value={docs.filter((d: any) => d.status === 'FAILED').length.toString()} 
               subtext="Lỗi trong quá trình AI" 
               icon={WarningOutlined} 
               color="#dc2626" bg="#fee2e2" 
@@ -464,7 +464,7 @@ export default function DashboardTealPage() {
                       dataSource={filteredDocs} 
                       rowKey="id" 
                       pagination={{
-                        placement: ['bottomRight'],
+                        position: ['bottomRight'],
                         pageSize: 5,
                         showSizeChanger: false,
                         style: { padding: '16px 24px', margin: 0 }

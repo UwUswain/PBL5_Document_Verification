@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!initialized) return;
 
     const token = localStorage.getItem('pbl5_token');
-    const isPublicPath = pathname === '/login' || pathname === '/';
+    const isPublicPath = pathname === '/login' || pathname === '/' || pathname === '/register';
 
     if (!token) {
       if (!isPublicPath) {
