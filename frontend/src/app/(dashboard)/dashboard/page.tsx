@@ -336,8 +336,8 @@ export default function DashboardTealPage() {
         <div style={{ position: 'sticky', top: 0, zIndex: 40, background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '16px 48px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <Title level={3} style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>Dashboard</Title>
-              <Text type="secondary" style={{ fontSize: 14 }}>AI-Powered Document Processing Platform</Text>
+              <Title level={3} style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>PBL5</Title>
+              <Text type="secondary" style={{ fontSize: 14 }}>Hệ thống phân tích văn bản hành chính thông minh</Text>
             </div>
             <Space>
               <Button icon={<FilterOutlined />} style={{ fontWeight: 500, borderColor: '#cbd5e1' }}>Filter</Button>

@@ -42,7 +42,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     const items: any[] = [
       {
         type: 'group',
-        label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>PLATFORM</span>,
+        label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>MỤC LỤC</span>,
         children: [
           { key: '/dashboard', icon: <AppstoreOutlined />, label: t('dashboard') || 'Dashboard' },
           { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },

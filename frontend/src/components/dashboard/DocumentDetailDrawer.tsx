@@ -196,7 +196,7 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
             {/* Section 4: Thực thể bóc tách */}
             <section>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <Title level={5} style={{ margin: 0, fontSize: 12, letterSpacing: '1px' }}>THỰC THỂ BÓC TÁCH</Title>
+                <Title level={5} style={{ margin: 0, fontSize: 12, letterSpacing: '1px' }}>KHU VỰC KIỂM CHỨNG</Title>
                 <Button 
                   size="small" 
                   type="link" 
