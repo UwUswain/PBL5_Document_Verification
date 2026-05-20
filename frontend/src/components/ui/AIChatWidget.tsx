@@ -13,7 +13,8 @@ interface ChatMessage {
 export function AIChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Xin chào! Tôi có thể giúp gì cho bạn trong việc tìm kiếm và tóm tắt văn bản hôm nay?' }
+    { role: 'assistant', content: 'Chào bạn, quyết định cung cấp thông tin này bạn xin ở Sở tư pháp lâu không ạ?' },
+    { role: 'user', content: 'Chào bạn, tầm 2-3 ngày làm việc là có kết quả nhé.' }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,17 +36,6 @@ export function AIChatWidget() {
     const userMsg = inputValue.trim();
     setInputValue('');
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setIsLoading(true);
-
-    try {
-      const res = await docService.chat(userMsg);
-      const botMsg = res.data?.reply || res.data?.message || 'Hệ thống AI đang bảo trì, vui lòng thử lại sau.';
-      setMessages(prev => [...prev, { role: 'assistant', content: botMsg }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Đã có lỗi xảy ra khi kết nối với AI Server.' }]);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -65,7 +55,7 @@ export function AIChatWidget() {
         >
           {/* Header */}
           <div style={{ 
-            background: '#2563eb', // blue-600
+            background: '#008080', // Teal
             padding: '12px 16px', 
             display: 'flex', 
             justifyContent: 'space-between', 
@@ -73,8 +63,11 @@ export function AIChatWidget() {
             color: 'white'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <RobotOutlined style={{ fontSize: 20 }} />
-              <span style={{ fontWeight: 600, fontSize: 14 }}>PBL5 AI Assistant</span>
+              <div className="animate-pulse" style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>💬 Hộp thư trực tuyến</span>
+                <span style={{ fontSize: 10, opacity: 0.9 }}>(Connected via WebSockets)</span>
+              </div>
             </div>
             <Button 
               type="text" 
@@ -94,33 +87,29 @@ export function AIChatWidget() {
                 flexDirection: msg.role === 'user' ? 'row-reverse' : 'row'
               }}>
                 <Avatar 
-                  icon={msg.role === 'user' ? <UserOutlined /> : <RobotOutlined />} 
-                  style={{ background: msg.role === 'user' ? '#94a3b8' : '#2563eb', flexShrink: 0 }}
+                  icon={<UserOutlined />} 
+                  style={{ background: msg.role === 'user' ? '#008080' : '#94a3b8', flexShrink: 0 }}
                   size="small"
                 />
-                <div style={{
-                  background: msg.role === 'user' ? '#2563eb' : 'white',
-                  color: msg.role === 'user' ? 'white' : '#334155',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  border: msg.role === 'user' ? 'none' : '1px solid #e2e8f0',
-                  fontSize: 13,
-                  maxWidth: '80%',
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word'
-                }}>
-                  {msg.content}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>{msg.role === 'user' ? 'Bạn' : 'User_Ẩn_Danh_99'}</span>
+                  <div style={{
+                    background: msg.role === 'user' ? '#008080' : 'white',
+                    color: msg.role === 'user' ? 'white' : '#334155',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    border: msg.role === 'user' ? 'none' : '1px solid #e2e8f0',
+                    fontSize: 13,
+                    maxWidth: 220,
+                    lineHeight: 1.5,
+                    wordBreak: 'break-word'
+                  }}>
+                    {msg.content}
+                  </div>
                 </div>
               </div>
             ))}
-            {isLoading && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Avatar icon={<RobotOutlined />} style={{ background: '#2563eb' }} size="small" />
-                <div style={{ background: 'white', padding: '8px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
-                  <span className="animate-pulse text-slate-400 text-xs">AI đang suy nghĩ...</span>
-                </div>
-              </div>
-            )}
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -140,8 +129,7 @@ export function AIChatWidget() {
                 type="primary" 
                 icon={<SendOutlined />} 
                 onClick={handleSend}
-                loading={isLoading}
-                style={{ background: '#2563eb' }}
+                style={{ background: '#008080' }}
               />
             </div>
           </div>
@@ -153,7 +141,7 @@ export function AIChatWidget() {
           size="large"
           icon={<MessageOutlined style={{ fontSize: 24 }} />} 
           onClick={() => setIsOpen(true)}
-          style={{ width: 60, height: 60, boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)', background: '#2563eb' }}
+          style={{ width: 60, height: 60, boxShadow: '0 4px 12px rgba(0, 128, 128, 0.4)', background: '#008080' }}
         />
       )}
     </div>

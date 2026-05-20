@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  Typography, Table, Tag, Button, Input, Dropdown, MenuProps, Space, Badge, ConfigProvider, Tooltip, notification, Card
+  Typography, Table, Tag, Button, Input, Dropdown, MenuProps, Space, Badge, ConfigProvider, Tooltip, notification, Card, Empty, Popconfirm
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -297,7 +297,20 @@ export default function DashboardTealPage() {
           { key: 'view', label: 'View Details', icon: <EyeOutlined />, onClick: () => setSelectedDoc(record) },
           { key: 'download', label: 'Download', icon: <DownloadOutlined /> },
           { type: 'divider' },
-          { key: 'delete', label: <Text type="danger">Delete</Text>, icon: <DeleteOutlined style={{ color: '#ef4444' }} /> },
+          { key: 'delete', label: (
+            <Popconfirm
+              title="Xác nhận thực hiện?"
+              description="Bạn có chắc chắn muốn thực hiện hành động này? Thao tác này không thể hoàn tác."
+              okText="Xác nhận"
+              cancelText="Hủy"
+              okButtonProps={{ danger: true }}
+              onConfirm={(e) => {
+                e?.stopPropagation(); // Xử lý nếu cần
+              }}
+            >
+              <Text type="danger">Delete</Text>
+            </Popconfirm>
+          ), icon: <DeleteOutlined style={{ color: '#ef4444' }} /> },
         ];
         return (
           <Dropdown menu={{ items }} trigger={['click']} placement="bottomRight">
@@ -348,17 +361,39 @@ export default function DashboardTealPage() {
 
         <div style={{ maxWidth: 1400, margin: '0 auto', padding: '32px 48px' }}>
           
-          {/* Search Bar */}
-          <div style={{ marginBottom: 32 }}>
-            <Input.Search 
-              placeholder="Search documents, invoices, or contracts..." 
-              onSearch={(val) => setSearchQuery(val)}
-              allowClear
-              size="large"
-              prefix={<SearchOutlined style={{ color: '#94a3b8', marginRight: 8 }} />}
-              enterButton={<Button type="primary" style={{ backgroundColor: '#008080' }}>Tìm kiếm</Button>}
-              style={{ width: '100%', maxWidth: 600, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}
-            />
+          {/* BIG SEARCH BANNER (STUDOCU STYLE) */}
+          <div style={{ 
+            marginBottom: 40, 
+            padding: '48px 24px', 
+            background: 'linear-gradient(to right, #008080, #0f766e)', 
+            borderRadius: 24, 
+            textAlign: 'center',
+            boxShadow: '0 10px 15px -3px rgba(0, 128, 128, 0.3)' 
+          }}>
+            <Title level={2} style={{ color: '#ffffff', margin: '0 0 24px 0', fontWeight: 700 }}>Bạn đang tìm kiếm tài liệu gì?</Title>
+            <div style={{ maxWidth: 700, margin: '0 auto' }}>
+              <Input.Search 
+                placeholder="Nhập tên văn bằng, chứng chỉ hoặc từ khóa bạn muốn tìm kiếm..." 
+                onSearch={(val) => setSearchQuery(val)}
+                allowClear
+                size="large"
+                enterButton={<Button type="primary" size="large" style={{ backgroundColor: '#ffffff', color: '#008080', fontWeight: 600, border: 'none' }}>Tìm kiếm</Button>}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+              {["📑 Bằng Đại học", "🇯🇵 Chứng chỉ JLPT", "🇬🇧 Chứng chỉ TOEIC", "🛡️ Chứng chỉ AWS"].map((tag, idx) => (
+                <Button 
+                  key={idx} 
+                  shape="round" 
+                  type="default" 
+                  onClick={() => setSearchQuery(tag.split(' ').slice(1).join(' '))}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.3)', fontWeight: 500 }}
+                >
+                  {tag}
+                </Button>
+              ))}
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -469,6 +504,7 @@ export default function DashboardTealPage() {
                         showSizeChanger: false,
                         style: { padding: '16px 24px', margin: 0 }
                       }}
+                      locale={{ emptyText: <Empty description="Chưa có dữ liệu" /> }}
                     />
                   )}
                 </Card>
@@ -498,6 +534,43 @@ export default function DashboardTealPage() {
 
             </div>
           </div>
+          
+          {/* CỘNG ĐỒNG: Tài liệu gợi ý */}
+          <div style={{ marginTop: 40 }}>
+            <h2 style={{ margin: '0 0 24px 0', color: '#0f172a', fontSize: 24, fontWeight: 700 }}>💡 Tài liệu được tìm kiếm nhiều nhất theo ngành của bạn</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16 }}>
+              {[
+                { title: 'Chứng chỉ Kỹ sư cầu nối Nhật Bản - N2', owner: 'Lê Văn A', icon: '🇯🇵', verified: true },
+                { title: 'Bằng Tốt nghiệp Kỹ sư CNTT - ĐH Bách Khoa', owner: 'Nguyễn Văn B', icon: '🎓', verified: true },
+                { title: 'Chứng chỉ AWS Certified Solutions Architect', owner: 'Trần Thị C', icon: '☁️', verified: true },
+                { title: 'Chứng chỉ TOEIC 850 - IIG Việt Nam', owner: 'Phạm Văn D', icon: '🇬🇧', verified: true }
+              ].map((doc, idx) => (
+                <Card 
+                  key={idx} 
+                  hoverable 
+                  style={{ borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}
+                  styles={{ body: { padding: 0 } }}
+                >
+                  <div style={{ height: 120, backgroundColor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48 }}>
+                    {doc.icon}
+                  </div>
+                  <div style={{ padding: 16 }}>
+                    <div style={{ marginBottom: 8 }}>
+                      {doc.verified && <Tag color="#008080" style={{ borderRadius: 4, margin: 0, fontWeight: 600 }}>Verified by AI</Tag>}
+                    </div>
+                    <Title level={5} style={{ margin: '0 0 8px 0', color: '#0f172a', fontWeight: 600, fontSize: 15, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{doc.title}</Title>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#e2e8f0', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 12 }}>
+                        {doc.owner.charAt(0)}
+                      </div>
+                      <Text style={{ display: 'block', fontSize: 13, color: '#64748b' }}>Đóng góp bởi {doc.owner}</Text>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+          
         </div>
 
         {/* Modals & Drawers */}

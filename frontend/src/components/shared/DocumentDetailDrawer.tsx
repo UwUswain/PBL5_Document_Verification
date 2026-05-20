@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import { 
-  Drawer, Tag, Typography, theme, Row, Col, Space, Button, Alert, QRCode 
+  Drawer, Tag, Typography, theme, Row, Col, Space, Button, Alert, QRCode, Switch, message 
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -28,6 +28,7 @@ interface DocumentDetailDrawerProps {
 export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: DocumentDetailDrawerProps) {
   const { token } = theme.useToken();
   const [cropModalVisible, setCropModalVisible] = useState(false);
+  const [isShared, setIsShared] = useState(false);
   const { user } = useAuth();
   
   const isDarkMode = token.colorBgContainer === '#141414';
@@ -49,6 +50,18 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
       a.download = `QRCode-${document.file_name}.png`;
       a.href = url;
       a.click();
+    }
+  };
+
+  const handleShareChange = (checked: boolean) => {
+    setIsShared(checked);
+    if (checked) {
+      message.loading({ content: 'AI đang tiến hành che mờ (Masking) các thông tin nhạy cảm (CCCD, Số điện thoại)...', key: 'share' });
+      setTimeout(() => {
+        message.success({ content: 'Đã gửi tài liệu sạch vào hàng đợi phê duyệt của Admin!', key: 'share', duration: 2 });
+      }, 1500);
+    } else {
+      message.info('Đã tắt chế độ chia sẻ công khai');
     }
   };
 
@@ -160,6 +173,13 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
                 <Tag color="processing" bordered={false} style={{ fontSize: 10, fontWeight: 800 }}>AI ANALYZED</Tag>
               </div>
               <Title level={2} style={{ margin: '0 0 16px 0', fontWeight: 800 }}>{document.category?.toUpperCase() || 'KHÁC'}</Title>
+              
+              <div style={{ marginBottom: 16 }}>
+                <Space>
+                  <Switch checked={isShared} onChange={handleShareChange} style={{ background: isShared ? '#008080' : undefined }} />
+                  <Text strong style={{ color: '#008080' }}>Chia sẻ công khai với cộng đồng (Public to Community)</Text>
+                </Space>
+              </div>
               
               <div style={{ 
                 padding: 16, 

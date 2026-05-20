@@ -1,5 +1,5 @@
 'use client';
-import { Layout, Menu, Button, Dropdown, Avatar, ConfigProvider, theme } from 'antd';
+import { Layout, Menu, Button, Dropdown, Avatar, ConfigProvider, theme, Popconfirm } from 'antd';
 import {
   AppstoreOutlined,
   FileTextOutlined,
@@ -68,8 +68,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {
         key: 'logout',
         icon: <LogoutOutlined />,
-        label: t('logout') || 'Logout',
-        onClick: logout
+        label: (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Popconfirm
+              title="Xác nhận thực hiện?"
+              description="Bạn có chắc chắn muốn thực hiện hành động này? Thao tác này không thể hoàn tác."
+              okText="Xác nhận"
+              cancelText="Hủy"
+              onConfirm={logout}
+            >
+              <div style={{ width: '100%' }}>{t('logout') || 'Logout'}</div>
+            </Popconfirm>
+          </div>
+        )
       }
     ]
   };
@@ -144,15 +155,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <div style={{ fontSize: 11, color: '#64748b' }}>{user?.role?.toUpperCase() || 'MEMBER'}</div>
                 </div>
               </div>
-              <Button
-                type="text"
-                block
-                icon={<LogoutOutlined />}
-                onClick={logout}
-                style={{ textAlign: 'left', height: 36, borderRadius: 6, fontSize: 13, color: '#ef4444' }}
+              <Popconfirm
+                title="Xác nhận thực hiện?"
+                description="Bạn có chắc chắn muốn thực hiện hành động này? Thao tác này không thể hoàn tác."
+                okText="Xác nhận"
+                cancelText="Hủy"
+                onConfirm={logout}
               >
-                Sign out
-              </Button>
+                <Button
+                  type="text"
+                  block
+                  icon={<LogoutOutlined />}
+                  style={{ textAlign: 'left', height: 36, borderRadius: 6, fontSize: 13, color: '#ef4444' }}
+                >
+                  Sign out
+                </Button>
+              </Popconfirm>
             </div>
           )}
         </Sider>

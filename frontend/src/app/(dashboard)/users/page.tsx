@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Table, Card, Tag, Button, Space, Modal, Form, Input, Select, Switch, message, Typography } from 'antd';
+import { Table, Card, Tag, Button, Space, Modal, Form, Input, Select, Switch, message, Typography, Empty } from 'antd';
 import { UserOutlined, EditOutlined, DeleteOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { docService } from '@/services/api';
 import { useState } from 'react';
@@ -120,6 +120,7 @@ export default function UsersPage() {
             columns={columns} 
             dataSource={users} 
             rowKey="id" 
+            locale={{ emptyText: <Empty description="Chưa có dữ liệu" /> }}
             pagination={{ pageSize: 10 }}
           />
         )}

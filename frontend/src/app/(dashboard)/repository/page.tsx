@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { 
   Table, Card, Input, Button, Tag, Space, 
-  Typography, message, Popconfirm, Tooltip, theme, Row, Col 
+  Typography, message, Popconfirm, Tooltip, theme, Row, Col, Empty, Tabs
 } from 'antd';
 import { 
   SearchOutlined, 
@@ -27,6 +27,7 @@ export default function RepositoryPage() {
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [activeTab, setActiveTab] = useState("all");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['docs'],
@@ -111,10 +112,10 @@ export default function RepositoryPage() {
           </Tooltip>
           
           <Popconfirm
-            title="Xóa tài liệu"
-            description="Bạn có chắc chắn muốn xóa tài liệu này không? Hành động này không thể hoàn tác."
+            title="Xác nhận thực hiện?"
+            description="Bạn có chắc chắn muốn thực hiện hành động này? Thao tác này không thể hoàn tác."
             onConfirm={() => deleteMutation.mutate(record.id)}
-            okText="Xóa"
+            okText="Xác nhận"
             cancelText="Hủy"
             okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
           >
@@ -129,12 +130,23 @@ export default function RepositoryPage() {
     }
   ];
 
-  const displayDocs = searchResults || docs;
+  let displayDocs = searchResults || docs;
+  if (activeTab === 'foreign') {
+    displayDocs = displayDocs.filter(d => d.file_name?.toLowerCase().includes('chứng chỉ') || d.file_name?.toLowerCase().includes('tiếng') || d.file_name?.toLowerCase().includes('ielts') || d.file_name?.toLowerCase().includes('toeic'));
+  } else if (activeTab === 'award') {
+    displayDocs = displayDocs.filter(d => d.file_name?.toLowerCase().includes('khen') || d.file_name?.toLowerCase().includes('giải'));
+  }
+
+  const tabItems = [
+    { key: 'all', label: 'Tất cả văn bằng' },
+    { key: 'foreign', label: 'Chứng chỉ ngoại ngữ' },
+    { key: 'award', label: 'Bằng khen & Giải thưởng' }
+  ];
 
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={3} style={{ margin: 0, color: token.colorText }}>Kho tài liệu văn bản</Title>
+        <Title level={3} style={{ margin: 0, color: token.colorText }}>Không gian của tôi (My Space)</Title>
         <Space>
           <Input.Search 
             placeholder="Tìm kiếm thông minh..." 
@@ -150,6 +162,7 @@ export default function RepositoryPage() {
       </div>
 
       <Card bordered={false}>
+        <Tabs items={tabItems} activeKey={activeTab} onChange={setActiveTab} style={{ marginBottom: 16 }} />
         {isLoading ? (
           <SkeletonTable rowCount={8} />
         ) : (
@@ -158,14 +171,7 @@ export default function RepositoryPage() {
             dataSource={displayDocs} 
             rowKey="id" 
             locale={{
-              emptyText: (
-                <EmptyState 
-                  type={searchResults ? 'search' : 'docs'} 
-                  onAction={() => {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                />
-              )
+              emptyText: <Empty description="Chưa có dữ liệu" />
             }}
             pagination={{ pageSize: 10 }}
           />
