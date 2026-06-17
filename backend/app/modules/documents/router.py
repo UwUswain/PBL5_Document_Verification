@@ -10,6 +10,11 @@ from app.modules.users.models import User
 from app.modules.documents.models import Document
 from app.modules.documents.service import DocumentService
 from app.modules.documents.schemas import DocumentOut, DocumentPageOut
+from app.shared.utils.ai_service import chat_with_document_context
+from pydantic import BaseModel
+
+class ChatRequest(BaseModel):
+    question: str
 
 router = APIRouter()
 
@@ -183,3 +188,22 @@ async def get_document(
     current_user: User = Depends(get_current_user)
 ):
     return await DocumentService.get_document_by_id(db, document_id, current_user)
+
+# 9. Chat with Document
+@router.post("/{document_id}/chat")
+async def chat_with_document(
+    document_id: str,
+    body: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = await DocumentService.get_document_by_id(db, document_id, current_user)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # doc['data'] contains the document schema from the service
+    metadata = doc.get("ai_results") or {}
+    raw_text = doc.get("raw_text") or ""
+    
+    answer = await chat_with_document_context(body.question, raw_text, metadata)
+    return {"answer": answer}

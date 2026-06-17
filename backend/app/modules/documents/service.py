@@ -375,6 +375,7 @@ class DocumentService:
             "category": doc.category,
             "summary": doc.summary,
             "ai_results": doc.ai_results,
+            "raw_text": doc.raw_text,
             "file_path": doc.file_path,
             "qr_path": doc.qr_path,
             "public_token": doc.public_token,

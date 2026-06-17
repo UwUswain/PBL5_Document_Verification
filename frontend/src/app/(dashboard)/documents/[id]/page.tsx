@@ -1,9 +1,9 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { 
-  Typography, Card, Tag, Row, Col, Space, Spin, Button, Steps, QRCode, Divider, Result 
+  Typography, Card, Tag, Row, Col, Space, Spin, Button, Steps, QRCode, Divider, Result, Tabs, Input, message
 } from 'antd';
 import { 
   ArrowLeftOutlined,
@@ -17,7 +17,9 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
   QrcodeOutlined,
-  PrinterOutlined
+  PrinterOutlined,
+  MessageOutlined,
+  SendOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
 
@@ -27,6 +29,28 @@ export default function DocumentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const docId = params.id as string;
+
+  const [chatInput, setChatInput] = useState('');
+  const [chatHistory, setChatHistory] = useState<{role: string, text: string}[]>([]);
+  const [isChatting, setIsChatting] = useState(false);
+
+  const handleChat = async () => {
+    if (!chatInput.trim()) return;
+    const q = chatInput.trim();
+    setChatInput('');
+    setChatHistory(prev => [...prev, { role: 'user', text: q }]);
+    setIsChatting(true);
+    
+    try {
+      const res = await docService.chatWithDocument(docId, q);
+      setChatHistory(prev => [...prev, { role: 'ai', text: res.data.answer || 'Không nhận được câu trả lời.' }]);
+    } catch (e: any) {
+      message.error('Lỗi khi gọi AI Assistant');
+      setChatHistory(prev => [...prev, { role: 'error', text: 'Lỗi kết nối đến AI. Vui lòng thử lại.' }]);
+    } finally {
+      setIsChatting(false);
+    }
+  };
 
   const { data: document, isLoading, isError } = useQuery({
     queryKey: ['document', docId],
@@ -147,44 +171,118 @@ export default function DocumentDetailPage() {
             </Row>
           </Card>
 
-          {/* AI Analysis */}
-          <Card title={<Space><RobotOutlined style={{ color: '#008080' }}/> Phân tích AI</Space>} style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, marginBottom: 24, borderLeft: '4px solid #008080' }}>
-              <Text strong style={{ color: '#0f766e', display: 'block', marginBottom: 8 }}>AI INSIGHT</Text>
-              <Text italic>"{document.ai_results?.content_analysis?.insight || 'Không có nhận định đặc biệt.'}"</Text>
-            </div>
+          {/* Tabs cho AI Analysis và AI Assistant */}
+          <Tabs 
+            defaultActiveKey="1" 
+            className="no-print"
+            items={[
+              {
+                key: '1',
+                label: <span><RobotOutlined /> Phân tích AI</span>,
+                children: (
+                  <Card style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                    <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, marginBottom: 24, borderLeft: '4px solid #008080' }}>
+                      <Text strong style={{ color: '#0f766e', display: 'block', marginBottom: 8 }}>AI INSIGHT</Text>
+                      <Text italic>"{document.ai_results?.content_analysis?.insight || 'Không có nhận định đặc biệt.'}"</Text>
+                    </div>
 
-            <Row gutter={[24, 24]}>
-              <Col span={24}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>TÓM TẮT (SUMMARY)</Text>
-                <Paragraph style={{ fontSize: 14, lineHeight: 1.6 }}>{document.summary || document.ai_results?.content_analysis?.summary_short || 'N/A'}</Paragraph>
-              </Col>
+                    <Row gutter={[24, 24]}>
+                      <Col span={24}>
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>TÓM TẮT (SUMMARY)</Text>
+                        <Paragraph style={{ fontSize: 14, lineHeight: 1.6 }}>{document.summary || document.ai_results?.content_analysis?.summary_short || 'N/A'}</Paragraph>
+                      </Col>
 
-              <Col span={24}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>ĐIỂM CHÍNH (MAIN POINTS)</Text>
-                <Space direction="vertical">
-                  {document.ai_results?.content_analysis?.main_points?.length > 0 
-                    ? document.ai_results.content_analysis.main_points.map((p: string, i: number) => (
-                        <Text key={i}><CheckCircleOutlined style={{ color: '#008080', marginRight: 8 }} />{p}</Text>
-                      ))
-                    : <Text type="secondary">N/A</Text>
-                  }
-                </Space>
-              </Col>
+                      <Col span={24}>
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>ĐIỂM CHÍNH (MAIN POINTS)</Text>
+                        <Space direction="vertical">
+                          {document.ai_results?.content_analysis?.main_points?.length > 0 
+                            ? document.ai_results.content_analysis.main_points.map((p: string, i: number) => (
+                                <Text key={i}><CheckCircleOutlined style={{ color: '#008080', marginRight: 8 }} />{p}</Text>
+                              ))
+                            : <Text type="secondary">N/A</Text>
+                          }
+                        </Space>
+                      </Col>
 
-              <Col span={24}>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>TỪ KHÓA (KEYWORDS)</Text>
-                <div>
-                  {document.ai_results?.content_analysis?.keywords?.length > 0 
-                    ? document.ai_results.content_analysis.keywords.map((kw: string, i: number) => (
-                        <Tag key={i} color="default" style={{ marginBottom: 8 }}>{kw}</Tag>
-                      ))
-                    : <Text type="secondary">N/A</Text>
-                  }
-                </div>
-              </Col>
-            </Row>
-          </Card>
+                      <Col span={24}>
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>TỪ KHÓA (KEYWORDS)</Text>
+                        <div>
+                          {document.ai_results?.content_analysis?.keywords?.length > 0 
+                            ? document.ai_results.content_analysis.keywords.map((kw: string, i: number) => (
+                                <Tag key={i} color="default" style={{ marginBottom: 8 }}>{kw}</Tag>
+                              ))
+                            : <Text type="secondary">N/A</Text>
+                          }
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+                )
+              },
+              {
+                key: '2',
+                label: <span><MessageOutlined /> AI Assistant</span>,
+                children: (
+                  <Card style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }} bodyStyle={{ display: 'flex', flexDirection: 'column', height: 450, padding: '16px 24px' }}>
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {chatHistory.length === 0 ? (
+                        <div style={{ textAlign: 'center', marginTop: 100 }}>
+                          <RobotOutlined style={{ fontSize: 48, color: '#cbd5e1', marginBottom: 16 }} />
+                          <Title level={5} style={{ color: '#64748b' }}>Hỏi tôi bất cứ điều gì về tài liệu này</Title>
+                          <Space style={{ marginTop: 16 }}>
+                            <Button size="small" onClick={() => { setChatInput('Tóm tắt tài liệu này'); }}>Tóm tắt tài liệu này</Button>
+                            <Button size="small" onClick={() => { setChatInput('Ai là người ký?'); }}>Ai là người ký?</Button>
+                          </Space>
+                        </div>
+                      ) : (
+                        chatHistory.map((msg, i) => (
+                          <div key={i} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                            <div style={{ 
+                              padding: '12px 16px', 
+                              borderRadius: 16, 
+                              backgroundColor: msg.role === 'user' ? '#008080' : msg.role === 'error' ? '#fee2e2' : '#f8fafc',
+                              color: msg.role === 'user' ? '#fff' : msg.role === 'error' ? '#ef4444' : '#0f172a',
+                              boxShadow: msg.role !== 'user' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                              border: msg.role !== 'user' ? '1px solid #e2e8f0' : 'none'
+                            }}>
+                              <Text style={{ color: 'inherit', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.text}</Text>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {isChatting && (
+                        <div style={{ alignSelf: 'flex-start' }}>
+                          <Spin size="small" /> <Text type="secondary" style={{ marginLeft: 8 }}>Đang phân tích...</Text>
+                        </div>
+                      )}
+                    </div>
+                    <Divider style={{ margin: '12px 0' }} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Input 
+                        placeholder="Nhập câu hỏi của bạn..." 
+                        value={chatInput} 
+                        onChange={e => setChatInput(e.target.value)} 
+                        onPressEnter={handleChat}
+                        disabled={isChatting}
+                        size="large"
+                      />
+                      <Button size="large" type="primary" icon={<SendOutlined />} onClick={handleChat} loading={isChatting} style={{ backgroundColor: '#008080' }}>Gửi</Button>
+                    </div>
+                  </Card>
+                )
+              }
+            ]}
+          />
+          
+          {/* Cấu hình hiển thị lúc in cho AI Analysis (Vì in không hỗ trợ Tabs) */}
+          <div className="print-header" style={{ display: 'none' }}>
+            <Title level={4} style={{ borderBottom: '1px solid #000', paddingBottom: 8, marginTop: 24 }}>PHÂN TÍCH AI</Title>
+            <Paragraph><strong>Tóm tắt:</strong> {document.summary || document.ai_results?.content_analysis?.summary_short || 'N/A'}</Paragraph>
+            <Paragraph><strong>Điểm chính:</strong></Paragraph>
+            <ul>
+              {(document.ai_results?.content_analysis?.main_points || []).map((p: string, i: number) => <li key={i}>{p}</li>)}
+            </ul>
+          </div>
         </Col>
 
         {/* CỘT PHẢI - 8 */}
