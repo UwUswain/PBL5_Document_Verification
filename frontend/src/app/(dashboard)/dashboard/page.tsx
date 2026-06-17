@@ -34,6 +34,10 @@ import { UploadModalTeal } from '@/components/dashboard/UploadModalTeal';
 import { SkeletonTable } from '@/components/ui/SkeletonTable';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
 
 const { Title, Text } = Typography;
 
@@ -148,6 +152,33 @@ export default function DashboardTealPage() {
       return true;
     });
   }, [docs, activeTab]);
+
+  // Analytics Data
+  const analytics = useMemo(() => {
+    const totalDocs = docs.length;
+    const completed = docs.filter((d: any) => d.status === 'COMPLETED').length;
+    const suspicious = docs.filter((d: any) => d.verification_status === 'SUSPICIOUS').length;
+    const failed = docs.filter((d: any) => d.status === 'FAILED').length;
+
+    // Categories
+    const categoryCount: Record<string, number> = {};
+    docs.forEach((d: any) => {
+      const cat = formatCategory(d.category);
+      categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+    });
+    const pieData = Object.keys(categoryCount).map(key => ({ name: key, value: categoryCount[key] }));
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#ffc658'];
+
+    // Timeline
+    const dateCount: Record<string, number> = {};
+    [...docs].reverse().forEach((d: any) => {
+      const date = new Date(d.created_at).toLocaleDateString('vi-VN');
+      dateCount[date] = (dateCount[date] || 0) + 1;
+    });
+    const lineData = Object.keys(dateCount).map(date => ({ date, count: dateCount[date] }));
+
+    return { totalDocs, completed, suspicious, failed, pieData, lineData, COLORS };
+  }, [docs]);
 
   // Real Recent Activity from docs
   const recentActivity = useMemo(() => {
@@ -410,45 +441,85 @@ export default function DashboardTealPage() {
             </div>
           </div>
 
-          {/* Stats Grid */}
+          {/* Stats Grid (REAL DATA) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24, marginBottom: 32 }}>
             <StatCard 
-              label="Tổng số tài liệu" 
-              value={stats?.total_documents || 0} 
-              subtext="Tài liệu trong hệ thống" 
+              label="Documents Overview" 
+              value={analytics.totalDocs} 
+              subtext="Tổng số tài liệu" 
               icon={FileTextOutlined} 
-              color="#008080" bg="#ccfbf1"
-              isLoading={isStatsLoading}
+              color="#0f766e" bg="#ccfbf1"
+              isLoading={isLoading}
             />
             <StatCard 
-              label="Tỉ lệ trích xuất" 
-              value={<span style={{ color: '#16a34a' }}>{stats?.extraction_rate || 0}%</span>} 
-              subtext="Độ chính xác AI" 
-              icon={LineChartOutlined} 
-              color="#008080" bg="#ccfbf1" 
-              isLoading={isStatsLoading}
+              label="Hoàn tất xử lý" 
+              value={analytics.completed} 
+              subtext="AI Analysis Done" 
+              icon={CheckCircleOutlined} 
+              color="#15803d" bg="#dcfce7" 
+              isLoading={isLoading}
             />
             <StatCard 
-              label="Người dùng hệ thống" 
-              value={stats?.total_users || 0} 
-              subtext="Tài khoản đang hoạt động" 
-              icon={UserOutlined} 
-              color="#d97706" bg="#fef3c7" 
-              isLoading={isStatsLoading}
-            />
-            <StatCard 
-              label="Lỗi trích xuất" 
-              value={
-                <span style={{ color: (stats?.error_documents || 0) > 0 ? '#dc2626' : '#16a34a' }}>
-                  {stats?.error_documents || 0}
-                </span>
-              } 
-              subtext="Lỗi trong quá trình AI" 
+              label="Nghi vấn (Suspicious)" 
+              value={analytics.suspicious} 
+              subtext="Cần kiểm tra lại" 
               icon={WarningOutlined} 
-              color={(stats?.error_documents || 0) > 0 ? "#dc2626" : "#16a34a"} 
-              bg={(stats?.error_documents || 0) > 0 ? "#fee2e2" : "#dcfce7"} 
-              isLoading={isStatsLoading}
+              color="#b45309" bg="#fef3c7" 
+              isLoading={isLoading}
             />
+            <StatCard 
+              label="Lỗi trích xuất (Failed)" 
+              value={analytics.failed} 
+              subtext="Hệ thống từ chối" 
+              icon={CloseCircleOutlined} 
+              color="#b91c1c" bg="#fee2e2" 
+              isLoading={isLoading}
+            />
+          </div>
+
+          {/* Charts Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24, marginBottom: 32 }}>
+            {/* Timeline LineChart */}
+            <Card title="Upload Trend (Timeline)" style={{ borderRadius: 16 }}>
+              <div style={{ height: 300, width: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={analytics.lineData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} allowDecimals={false} />
+                    <RechartsTooltip contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                    <Line type="monotone" dataKey="count" stroke="#008080" strokeWidth={3} dot={{r: 4, fill: '#008080', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+
+            {/* Categories PieChart & AI Alert */}
+            <Card title="Document Categories & AI Stats" style={{ borderRadius: 16 }}>
+              <div style={{ height: 220, width: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={analytics.pieData} innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
+                      {analytics.pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={analytics.COLORS[index % analytics.COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip />
+                    <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <div style={{ padding: '12px 16px', background: '#fffbeb', borderLeft: '4px solid #d97706', borderRadius: 4 }}>
+                  <Text strong style={{ color: '#b45309', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <WarningFilled /> Cảnh báo dữ liệu (AI Statistics)
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#92400e', display: 'block', marginTop: 4 }}>
+                    Hệ thống Database chưa phân tách log của lỗi OCR và lỗi Gemini Analysis. Hiện tại đang hiển thị Tỉ lệ trích xuất thành công toàn trình (Overall Extraction Rate): <b>{stats?.extraction_rate || 0}%</b>.
+                  </Text>
+                </div>
+              </div>
+            </Card>
           </div>
 
           {/* Documents and Activity Grid */}
