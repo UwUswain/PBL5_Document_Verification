@@ -279,7 +279,18 @@ export default function DocumentHistoryPage() {
                 showSizeChanger: true,
                 style: { padding: '16px 24px', margin: 0 }
               }}
-              locale={{ emptyText: <Empty description="Chưa có dữ liệu xử lý nào" /> }}
+              locale={{ 
+                emptyText: <Empty 
+                  image={Empty.PRESENTED_IMAGE_SIMPLE} 
+                  description={
+                    statusFilter === 'SUSPICIOUS' ? "Không có tài liệu nào bị cảnh báo" :
+                    statusFilter === 'FAILED' ? "Tuyệt vời, không có lỗi xử lý nào" :
+                    statusFilter === 'PROCESSING' ? "Không có tài liệu nào đang xử lý" :
+                    statusFilter === 'VERIFIED' ? "Chưa có tài liệu nào được xác thực" :
+                    "Chưa có lịch sử xử lý tài liệu"
+                  } 
+                /> 
+              }}
             />
           </Card>
         </div>

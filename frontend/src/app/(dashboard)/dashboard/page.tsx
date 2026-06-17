@@ -26,7 +26,8 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   CheckCircleOutlined,
-  UserOutlined
+  UserOutlined,
+  CloseCircleOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
 import { DocumentDetailDrawer } from '@/components/shared/DocumentDetailDrawer';
@@ -108,6 +109,15 @@ function ActivityItem({ action, document, time, type }: any) {
     </div>
   );
 }
+
+const formatCategory = (cat: string) => {
+  if (!cat) return 'N/A';
+  const upper = cat.toUpperCase();
+  if (upper.startsWith('CÔN') || upper.startsWith('CON')) return 'Công văn';
+  if (upper.startsWith('QUY')) return 'Quyết định';
+  if (upper.startsWith('THÔ') || upper.startsWith('THO')) return 'Thông báo';
+  return cat.charAt(0).toUpperCase() + cat.slice(1);
+};
 
 export default function DashboardTealPage() {
   const [activeTab, setActiveTab] = useState('all');
@@ -237,14 +247,6 @@ export default function DashboardTealPage() {
   
   const hasSuspicious = docs.some((d: any) => d.status?.toUpperCase() === 'COMPLETED' && d.verification_status?.toUpperCase() !== 'VERIFIED');
   
-  const formatCategory = (cat: string) => {
-    if (!cat) return 'N/A';
-    const upper = cat.toUpperCase();
-    if (upper.startsWith('CÔN') || upper.startsWith('CON')) return 'Công văn';
-    if (upper.startsWith('QUY')) return 'Quyết định';
-    if (upper.startsWith('THÔ') || upper.startsWith('THO')) return 'Thông báo';
-    return cat.charAt(0).toUpperCase() + cat.slice(1);
-  };
 
   const handleUpload = async (options: any) => {
     const { file, onSuccess, onError } = options;
@@ -598,7 +600,18 @@ export default function DashboardTealPage() {
                         showSizeChanger: false,
                         style: { padding: '16px 24px', margin: 0 }
                       }}
-                      locale={{ emptyText: <Empty description="Chưa có dữ liệu" /> }}
+                      locale={{ 
+                        emptyText: <Empty 
+                          image={Empty.PRESENTED_IMAGE_SIMPLE} 
+                          description={
+                            activeTab === 'suspicious' ? "Không có tài liệu nào bị cảnh báo" :
+                            activeTab === 'failed' ? "Tuyệt vời, không có lỗi xử lý nào" :
+                            activeTab === 'processing' ? "Không có tài liệu nào đang xử lý" :
+                            activeTab === 'verified' ? "Chưa có tài liệu nào được xác thực" :
+                            "Không có tài liệu nào"
+                          } 
+                        /> 
+                      }}
                     />
                   )}
                 </Card>
@@ -616,7 +629,9 @@ export default function DashboardTealPage() {
                     {recentActivity.length > 0 ? recentActivity.map((item: any) => (
                       <ActivityItem key={item.id} {...item} />
                     )) : (
-                      <Text type="secondary" style={{ textAlign: 'center', padding: '24px 0' }}>Không có hoạt động nào</Text>
+                      <div style={{ padding: '24px 0', textAlign: 'center' }}>
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có hoạt động nào" />
+                      </div>
                     )}
                   </div>
                   
@@ -642,7 +657,7 @@ export default function DashboardTealPage() {
                     hoverable 
                     style={{ borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}
                     styles={{ body: { padding: 0 } }}
-                    onClick={() => setSelectedDoc(doc)}
+                    onClick={() => window.open(`/verify/${doc.public_token || doc.id}`, '_blank')}
                   >
                     <div style={{ height: 120, backgroundColor: '#ccfbf1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48 }}>
                       {doc.category?.toUpperCase().includes('NHẬT') ? '🇯🇵' : 

@@ -19,7 +19,9 @@ import {
   QrcodeOutlined,
   PrinterOutlined,
   MessageOutlined,
-  SendOutlined
+  SendOutlined,
+  DownloadOutlined,
+  CopyOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
 
@@ -132,9 +134,30 @@ export default function DocumentDetailPage() {
               <Text type="secondary">ID: {document.id}</Text>
             </div>
           </div>
-          <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.print()} style={{ backgroundColor: '#008080' }}>
-            Export PDF Report
-          </Button>
+          <Space>
+            <Button 
+              icon={<DownloadOutlined />} 
+              onClick={() => {
+                const url = docService.getImageUrl(document.file_path);
+                if (url) {
+                  const a = window.document.createElement('a');
+                  a.href = url;
+                  a.download = document.file_name || 'document';
+                  a.target = '_blank';
+                  window.document.body.appendChild(a);
+                  a.click();
+                  window.document.body.removeChild(a);
+                } else {
+                  message.error('Không tìm thấy đường dẫn file.');
+                }
+              }}
+            >
+              Download Original
+            </Button>
+            <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.print()} style={{ backgroundColor: '#008080' }}>
+              Export PDF Report
+            </Button>
+          </Space>
         </div>
         
         {/* Chỉ hiển thị khi in */}
@@ -148,7 +171,18 @@ export default function DocumentDetailPage() {
         {/* CỘT TRÁI - 16 */}
         <Col span={16}>
           {/* Thông tin Cơ bản */}
-          <Card title={<Space><FileTextOutlined style={{ color: '#008080' }}/> Thông tin Cơ bản</Space>} style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+          <Card 
+            title={<Space><FileTextOutlined style={{ color: '#008080' }}/> Thông tin Cơ bản</Space>} 
+            extra={
+              <Button type="text" size="small" icon={<CopyOutlined />} onClick={() => {
+                navigator.clipboard.writeText(document.raw_text || '');
+                message.success('Đã sao chép OCR Text');
+              }}>
+                Copy OCR Text
+              </Button>
+            }
+            style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+          >
             <Row gutter={[24, 24]}>
               <Col span={8}>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>NGƯỜI UPLOAD</Text>
@@ -317,6 +351,14 @@ export default function DocumentDetailPage() {
           <Card title={<Space><QrcodeOutlined style={{ color: '#008080' }}/> Mã QR Công Khai</Space>} style={{ borderRadius: 12, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <QRCode value={verifyLink} size={150} />
+              <div style={{ marginTop: 16, width: '100%', textAlign: 'center' }}>
+                <Button size="small" icon={<CopyOutlined />} onClick={() => {
+                  navigator.clipboard.writeText(verifyLink);
+                  message.success('Đã sao chép Link xác thực');
+                }}>
+                  Copy Verification Link
+                </Button>
+              </div>
               <div style={{ marginTop: 16, width: '100%' }}>
                 <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>QR TOKEN</Text>
                 <Paragraph copyable style={{ margin: 0, fontFamily: 'monospace', fontSize: 12, background: '#f1f5f9', padding: '4px 8px', borderRadius: 4 }}>
