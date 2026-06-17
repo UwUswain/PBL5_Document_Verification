@@ -131,16 +131,21 @@ export default function RepositoryPage() {
   ];
 
   let displayDocs = searchResults || docs;
-  if (activeTab === 'foreign') {
-    displayDocs = displayDocs.filter(d => d.file_name?.toLowerCase().includes('chứng chỉ') || d.file_name?.toLowerCase().includes('tiếng') || d.file_name?.toLowerCase().includes('ielts') || d.file_name?.toLowerCase().includes('toeic'));
-  } else if (activeTab === 'award') {
-    displayDocs = displayDocs.filter(d => d.file_name?.toLowerCase().includes('khen') || d.file_name?.toLowerCase().includes('giải'));
+  if (activeTab !== 'all') {
+    displayDocs = displayDocs.filter((d: any) => {
+      const cat = (d.ai_results?.content_analysis?.category || d.category || '').toLowerCase();
+      if (activeTab === 'foreign') return cat.includes('chứng chỉ') || cat.includes('ngoại ngữ') || cat.includes('toeic') || cat.includes('ielts');
+      if (activeTab === 'degree') return cat.includes('bằng tốt nghiệp') || cat.includes('đại học') || cat.includes('cử nhân');
+      if (activeTab === 'other') return !cat.includes('chứng chỉ') && !cat.includes('bằng tốt nghiệp') && !cat.includes('ngoại ngữ');
+      return true;
+    });
   }
 
   const tabItems = [
-    { key: 'all', label: 'Tất cả văn bằng' },
+    { key: 'all', label: 'Tất cả' },
     { key: 'foreign', label: 'Chứng chỉ ngoại ngữ' },
-    { key: 'award', label: 'Bằng khen & Giải thưởng' }
+    { key: 'degree', label: 'Bằng tốt nghiệp' },
+    { key: 'other', label: 'Khác' }
   ];
 
   return (

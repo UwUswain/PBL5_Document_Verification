@@ -51,4 +51,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     # 6. Trạng thái xử lý hệ thống
     status: Mapped[str] = mapped_column(String(20), default="RECEIVED") 
     verification_status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    
+    # 7. Trạng thái hiển thị (Cộng đồng)
+    is_public: Mapped[bool] = mapped_column(default=False)
     # Các trạng thái: pending, ocr_processing, ai_summarizing, completed, error

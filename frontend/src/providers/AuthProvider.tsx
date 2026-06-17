@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { docService } from '@/services/api';
 import { App } from 'antd';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface User {
   id: string;
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { message } = App.useApp();
+  const queryClient = useQueryClient();
 
   // 1. Hydration Effect: Chạy đúng 1 lần khi ứng dụng khởi động
   useEffect(() => {
@@ -80,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await docService.login(email, pass);
       // Lưu token lại ngay
-      localStorage.setItem('pbl5_token', res.data.access_token);
+      localStorage.setItem('pbl5_token', res.access_token);
       
       // Fetch profile mới nhất
       const profileRes = await docService.getProfile();
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     localStorage.removeItem('pbl5_token');
     setUser(null);
+    queryClient.clear();
     router.push('/login');
     message.info('Đã đăng xuất khỏi hệ thống');
   };

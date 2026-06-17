@@ -248,7 +248,7 @@ class DocumentService:
         return final_docs
 
     @staticmethod
-    async def delete_document(db: AsyncSession, document_id: str, user_id: uuid.UUID):
+    async def delete_document(db: AsyncSession, document_id: str, current_user):
         from app.shared.utils.vector_service import delete_from_vector_db
         stmt = select(Document).where(Document.id == uuid.UUID(document_id))
         result = await db.execute(stmt)
@@ -256,6 +256,9 @@ class DocumentService:
         
         if not doc:
             raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+        if doc.owner_id != current_user.id and current_user.role.value != "admin":
+            raise HTTPException(status_code=403, detail="Không có quyền xóa tài liệu này")
         
         # Xóa file vật lý (tùy chọn, ở đây giữ lại backup hoặc xóa hẳn)
         # try: os.remove(doc.file_path) except: pass
@@ -293,3 +296,50 @@ class DocumentService:
         total = await db.scalar(count_query)
         result = await db.execute(query)
         return (total or 0), result.scalars().all()
+
+    @staticmethod
+    async def list_public_documents(db: AsyncSession, limit: int, offset: int):
+        from app.modules.users.models import User
+        
+        query = select(Document, User.full_name).join(
+            User, Document.owner_id == User.id
+        ).where(
+            Document.is_public == True,
+            Document.status == "COMPLETED"
+        ).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+        
+        count_query = select(func.count()).select_from(Document).where(
+            Document.is_public == True, 
+            Document.status == "COMPLETED"
+        )
+        
+        total = await db.scalar(count_query)
+        result = await db.execute(query)
+        
+        rows = result.all()
+        items = []
+        for doc, full_name in rows:
+            # Ẩn danh một phần tên (Vd: Lê Văn A -> L*** A)
+            parts = full_name.split()
+            if len(parts) >= 2:
+                hidden_name = f"{parts[0]} *** {parts[-1]}"
+            else:
+                hidden_name = full_name
+                
+            doc_out = {
+                "id": doc.id,
+                "file_name": doc.file_name,
+                "sha256_hash": doc.sha256_hash,
+                "status": doc.status,
+                "category": doc.category,
+                "summary": doc.summary,
+                "ai_results": doc.ai_results,
+                "file_path": doc.file_path,
+                "qr_path": doc.qr_path,
+                "created_at": doc.created_at,
+                "updated_at": doc.updated_at,
+                "owner_name": hidden_name
+            }
+            items.append(doc_out)
+            
+        return (total or 0), items

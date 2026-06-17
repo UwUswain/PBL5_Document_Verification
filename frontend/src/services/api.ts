@@ -62,6 +62,7 @@ export const docService = {
   publicVerify: (token: string) => api.get(`/docs/verify/${token}`),
   
   getDocs: (limit = 10, offset = 0) => api.get("/docs", { params: { limit, offset } }),
+  getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
   
   upload: (file: File) => {
     const formData = new FormData();
@@ -99,6 +100,8 @@ export const docService = {
   },
 
   getPendingReview: (limit = 20, offset = 0) => api.get("/docs/admin/pending-review", { params: { limit, offset } }),
+
+  getDashboardStats: () => api.get("/docs/dashboard/stats"),
 
   // Admin User Management
   adminGetAllUsers: () => api.get("/users/"),

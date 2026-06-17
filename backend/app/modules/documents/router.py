@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
 
 from app.db.database import get_db
@@ -12,6 +12,50 @@ from app.modules.documents.service import DocumentService
 from app.modules.documents.schemas import DocumentOut, DocumentPageOut
 
 router = APIRouter()
+
+# 0. Dashboard Stats
+@router.get("/dashboard/stats", tags=["Dashboard"])
+async def get_dashboard_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Total documents
+    doc_count = await db.execute(select(func.count(Document.id)))
+    total_documents = doc_count.scalar() or 0
+
+    # Total users
+    user_count = await db.execute(select(func.count(User.id)))
+    total_users = user_count.scalar() or 0
+
+    # Error documents
+    error_count = await db.execute(
+        select(func.count(Document.id)).where(
+            (Document.verification_status == 'FAILED') | (Document.status == 'FAILED')
+        )
+    )
+    error_documents = error_count.scalar() or 0
+
+    if total_documents == 0:
+        extraction_rate = 100.0
+    else:
+        extraction_rate = round(((total_documents - error_documents) / total_documents) * 100, 1)
+
+    return {
+        "total_documents": total_documents,
+        "extraction_rate": extraction_rate,
+        "total_users": total_users,
+        "error_documents": error_documents
+    }
+
+# 0.1 Public Documents (Cộng đồng)
+@router.get("/public", response_model=DocumentPageOut)
+async def get_public_documents(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    total, items = await DocumentService.list_public_documents(db, limit, offset)
+    return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
 
 # 1. Lấy danh sách tài liệu của user
 @router.get("", response_model=DocumentPageOut)
@@ -126,7 +170,7 @@ async def manual_verify(
 async def delete_document(
     document_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(role_required(["admin"]))
+    current_user: User = Depends(get_current_user)
 ):
-    await DocumentService.delete_document(db, document_id, current_user.id)
+    await DocumentService.delete_document(db, document_id, current_user)
     return None
