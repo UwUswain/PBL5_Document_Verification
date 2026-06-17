@@ -130,13 +130,19 @@ export default function DashboardTealPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['docs', searchQuery],
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+
+  const { data: resData, isLoading, refetch } = useQuery({
+    queryKey: ['docs', searchQuery, currentPage, pageSize],
     queryFn: () => {
-      if (searchQuery) return docService.searchDocs(searchQuery).then(res => res.data.items || []);
-      return docService.getDocs(100, 0).then(res => res.data.items || []);
+      if (searchQuery) return docService.searchDocs(searchQuery).then(res => ({ items: res.data.results || [], meta: { total: res.data.results?.length || 0 } }));
+      return docService.getDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data);
     },
   });
+
+  const docs = resData?.items || [];
+  const totalDocs = resData?.meta?.total || 0;
 
   const { data: stats, isLoading: isStatsLoading } = useQuery({
     queryKey: ['dashboard_stats'],
@@ -149,7 +155,6 @@ export default function DashboardTealPage() {
   });
   const publicDocs = publicDocsData || [];
 
-  const docs = data || [];
 
   // Local Filtering
   const filteredDocs = useMemo(() => {
@@ -596,8 +601,14 @@ export default function DashboardTealPage() {
                       rowKey="id" 
                       pagination={{
                         position: ['bottomRight'],
-                        pageSize: 5,
-                        showSizeChanger: false,
+                        current: currentPage,
+                        pageSize: pageSize,
+                        total: totalDocs,
+                        showSizeChanger: true,
+                        onChange: (page, size) => {
+                          setCurrentPage(page);
+                          setPageSize(size);
+                        },
                         style: { padding: '16px 24px', margin: 0 }
                       }}
                       locale={{ 

@@ -29,12 +29,16 @@ export default function RepositoryPage() {
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const [activeTab, setActiveTab] = useState("all");
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['docs'],
-    queryFn: () => docService.getDocs().then(res => res.data.items || []),
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const { data: resData, isLoading, refetch } = useQuery({
+    queryKey: ['docs', currentPage, pageSize],
+    queryFn: () => docService.getDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data),
   });
 
-  const docs = data || [];
+  const docs = resData?.items || [];
+  const totalDocs = resData?.meta?.total || 0;
 
   const handleSearch = async (value: string) => {
     if (!value.trim()) {
@@ -178,7 +182,16 @@ export default function RepositoryPage() {
             locale={{
               emptyText: <Empty description="Chưa có dữ liệu" />
             }}
-            pagination={{ pageSize: 10 }}
+            pagination={{ 
+              current: currentPage,
+              pageSize: pageSize,
+              total: totalDocs,
+              showSizeChanger: true,
+              onChange: (page, size) => {
+                setCurrentPage(page);
+                setPageSize(size);
+              }
+            }}
           />
         )}
       </Card>

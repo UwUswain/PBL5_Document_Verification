@@ -26,12 +26,16 @@ export default function DocumentHistoryPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['docs_history'],
-    queryFn: () => docService.getDocs(200, 0).then(res => res.data.items || []),
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const { data: resData, isLoading } = useQuery({
+    queryKey: ['docs_history', currentPage, pageSize],
+    queryFn: () => docService.getDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data),
   });
 
-  const docs = data || [];
+  const docs = resData?.items || [];
+  const totalDocs = resData?.meta?.total || 0;
 
   // Local Filtering
   const filteredDocs = useMemo(() => {
@@ -275,8 +279,14 @@ export default function DocumentHistoryPage() {
               }}
               pagination={{
                 position: ['bottomRight'],
-                pageSize: 10,
+                current: currentPage,
+                pageSize: pageSize,
+                total: totalDocs,
                 showSizeChanger: true,
+                onChange: (page, size) => {
+                  setCurrentPage(page);
+                  setPageSize(size);
+                },
                 style: { padding: '16px 24px', margin: 0 }
               }}
               locale={{ 
