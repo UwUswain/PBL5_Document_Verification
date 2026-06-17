@@ -174,3 +174,12 @@ async def delete_document(
 ):
     await DocumentService.delete_document(db, document_id, current_user)
     return None
+
+# 8. Lấy chi tiết tài liệu theo ID
+@router.get("/{document_id}")
+async def get_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await DocumentService.get_document_by_id(db, document_id, current_user)

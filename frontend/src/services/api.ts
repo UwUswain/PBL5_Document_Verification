@@ -63,6 +63,7 @@ export const docService = {
   
   getDocs: (limit = 10, offset = 0) => api.get("/docs", { params: { limit, offset } }),
   getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
+  getDocById: (id: string) => api.get(`/docs/${id}`),
   
   upload: (file: File) => {
     const formData = new FormData();

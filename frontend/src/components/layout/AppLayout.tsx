@@ -9,7 +9,8 @@ import {
   GlobalOutlined,
   BulbOutlined,
   BulbFilled,
-  TeamOutlined
+  TeamOutlined,
+  HistoryOutlined
 } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
@@ -47,6 +48,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           { key: '/dashboard', icon: <AppstoreOutlined />, label: t('dashboard') || 'Dashboard' },
           { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },
           { key: '/search', icon: <SearchOutlined />, label: t('search') || 'Search' },
+          { key: '/history', icon: <HistoryOutlined />, label: t('history') || 'Processing History' },
         ]
       },
     ];

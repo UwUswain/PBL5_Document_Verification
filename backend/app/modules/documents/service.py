@@ -343,3 +343,43 @@ class DocumentService:
             items.append(doc_out)
             
         return (total or 0), items
+
+    @staticmethod
+    async def get_document_by_id(db: AsyncSession, doc_id: str, current_user):
+        from app.modules.users.models import User
+        
+        query = select(Document, User.full_name).join(
+            User, Document.owner_id == User.id
+        ).where(
+            Document.id == uuid.UUID(doc_id)
+        )
+        
+        result = await db.execute(query)
+        row = result.first()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+        doc, full_name = row
+        
+        # Security check: Only owner or admin can view private documents
+        if not doc.is_public and doc.owner_id != current_user.id and current_user.role.value != "admin":
+            raise HTTPException(status_code=403, detail="Bạn không có quyền xem tài liệu này")
+            
+        return {
+            "id": doc.id,
+            "file_name": doc.file_name,
+            "sha256_hash": doc.sha256_hash,
+            "status": doc.status,
+            "verification_status": doc.verification_status,
+            "category": doc.category,
+            "summary": doc.summary,
+            "ai_results": doc.ai_results,
+            "file_path": doc.file_path,
+            "qr_path": doc.qr_path,
+            "public_token": doc.public_token,
+            "created_at": doc.created_at,
+            "updated_at": doc.updated_at,
+            "owner_name": full_name,
+            "is_public": doc.is_public
+        }
