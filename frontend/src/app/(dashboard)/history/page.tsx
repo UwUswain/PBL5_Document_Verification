@@ -32,6 +32,11 @@ export default function DocumentHistoryPage() {
   const { data: resData, isLoading } = useQuery({
     queryKey: ['docs_history', currentPage, pageSize],
     queryFn: () => docService.getDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data),
+    refetchInterval: (query: any) => {
+      const items = query.state.data?.items || [];
+      const hasPending = items.some((doc: any) => !['COMPLETED', 'FAILED'].includes(doc.status?.toUpperCase()));
+      return hasPending ? 5000 : false;
+    }
   });
 
   const docs = resData?.items || [];

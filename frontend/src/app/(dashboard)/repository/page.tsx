@@ -35,6 +35,11 @@ export default function RepositoryPage() {
   const { data: resData, isLoading, refetch } = useQuery({
     queryKey: ['docs', currentPage, pageSize],
     queryFn: () => docService.getDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data),
+    refetchInterval: (query: any) => {
+      const items = query.state.data?.items || [];
+      const hasPending = items.some((doc: any) => !['COMPLETED', 'FAILED'].includes(doc.status?.toUpperCase()));
+      return hasPending ? 5000 : false;
+    }
   });
 
   const docs = resData?.items || [];
