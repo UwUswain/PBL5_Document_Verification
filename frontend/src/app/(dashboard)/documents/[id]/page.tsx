@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { 
-  Typography, Card, Tag, Row, Col, Space, Spin, Button, Steps, QRCode, Divider, Result, Tabs, Input, message
+  Typography, Card, Tag, Row, Col, Space, Spin, Button, Steps, QRCode, Divider, Result, Tabs, Input, message, Select, Modal, Form
 } from 'antd';
 import { 
   ArrowLeftOutlined,
@@ -21,7 +21,10 @@ import {
   MessageOutlined,
   SendOutlined,
   DownloadOutlined,
-  CopyOutlined
+  CopyOutlined,
+  LockOutlined,
+  TeamOutlined,
+  GlobalOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
 
@@ -31,10 +34,26 @@ export default function DocumentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const docId = params.id as string;
+  const queryClient = useQueryClient();
 
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: string, text: string}[]>([]);
   const [isChatting, setIsChatting] = useState(false);
+
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareForm] = Form.useForm();
+
+  const updatePrivacyMutation = useMutation({
+    mutationFn: (data: { level: string, shared_with: string[] }) => docService.updatePrivacy(docId, data),
+    onSuccess: () => {
+      message.success('Cập nhật quyền truy cập thành công');
+      queryClient.invalidateQueries({ queryKey: ['document', docId] });
+      setIsShareModalOpen(false);
+    },
+    onError: () => {
+      message.error('Bạn không có quyền thực hiện hoặc có lỗi xảy ra');
+    }
+  });
 
   const handleChat = async () => {
     if (!chatInput.trim()) return;
@@ -59,6 +78,23 @@ export default function DocumentDetailPage() {
     queryFn: () => docService.getDocById(docId).then(res => res.data),
     enabled: !!docId,
   });
+
+  const handlePrivacyChange = (value: string) => {
+    if (value === 'SHARED') {
+      const currentShared = document?.ai_results?.shared_with || [];
+      shareForm.setFieldsValue({ shared_with: currentShared.join(', ') });
+      setIsShareModalOpen(true);
+    } else {
+      updatePrivacyMutation.mutate({ level: value, shared_with: [] });
+    }
+  };
+
+  const handleShareSubmit = (values: any) => {
+    const emails = values.shared_with 
+      ? values.shared_with.split(',').map((e: string) => e.trim()).filter(Boolean) 
+      : [];
+    updatePrivacyMutation.mutate({ level: 'SHARED', shared_with: emails });
+  };
 
   if (isLoading) {
     return (
@@ -131,7 +167,22 @@ export default function DocumentDetailPage() {
             <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()} type="text" />
             <div>
               <Title level={3} style={{ margin: 0, color: '#0f172a' }}>{document.file_name}</Title>
-              <Text type="secondary">ID: {document.id}</Text>
+              <Space>
+                <Text type="secondary">ID: {document.id}</Text>
+                <Divider type="vertical" />
+                <Select
+                  value={document?.ai_results?.privacy_level || 'PRIVATE'}
+                  onChange={handlePrivacyChange}
+                  style={{ width: 110 }}
+                  variant="borderless"
+                  options={[
+                    { value: 'PRIVATE', label: <span style={{ color: '#475569' }}><LockOutlined /> Private</span> },
+                    { value: 'SHARED', label: <span style={{ color: '#0284c7' }}><TeamOutlined /> Shared</span> },
+                    { value: 'PUBLIC', label: <span style={{ color: '#16a34a' }}><GlobalOutlined /> Public</span> },
+                  ]}
+                  dropdownStyle={{ borderRadius: 8 }}
+                />
+              </Space>
             </div>
           </div>
           <Space>
@@ -390,6 +441,29 @@ export default function DocumentDetailPage() {
         </Col>
       </Row>
     </div>
+      <Modal
+        title="Chia sẻ tài liệu"
+        open={isShareModalOpen}
+        onCancel={() => setIsShareModalOpen(false)}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={shareForm} layout="vertical" onFinish={handleShareSubmit} style={{ marginTop: 16 }}>
+          <Form.Item 
+            name="shared_with" 
+            label="Email người được chia sẻ"
+            extra="Nhập các email cách nhau bằng dấu phẩy (,)"
+          >
+            <Input.TextArea rows={4} placeholder="nguyenvana@gmail.com, tranvanb@gmail.com" />
+          </Form.Item>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <Button onClick={() => setIsShareModalOpen(false)}>Hủy</Button>
+            <Button type="primary" htmlType="submit" loading={updatePrivacyMutation.isPending} style={{ backgroundColor: '#008080' }}>
+              Lưu chia sẻ
+            </Button>
+          </div>
+        </Form>
+      </Modal>
     </>
   );
 }

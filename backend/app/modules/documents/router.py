@@ -9,7 +9,7 @@ from app.core.security import get_current_user, role_required
 from app.modules.users.models import User
 from app.modules.documents.models import Document
 from app.modules.documents.service import DocumentService
-from app.modules.documents.schemas import DocumentOut, DocumentPageOut
+from app.modules.documents.schemas import DocumentOut, DocumentPageOut, PrivacyRequest
 from app.shared.utils.ai_service import chat_with_document_context
 from pydantic import BaseModel
 
@@ -207,3 +207,13 @@ async def chat_with_document(
     
     answer = await chat_with_document_context(body.question, raw_text, metadata)
     return {"answer": answer}
+
+# 10. Update Document Privacy
+@router.patch("/{document_id}/privacy")
+async def update_privacy(
+    document_id: str,
+    body: PrivacyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await DocumentService.update_privacy(db, document_id, body, current_user)

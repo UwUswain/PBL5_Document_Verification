@@ -65,6 +65,7 @@ export const docService = {
   getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
   getDocById: (id: string) => api.get(`/docs/${id}`),
   chatWithDocument: (id: string, question: string) => api.post(`/docs/${id}/chat`, { question }),
+  updatePrivacy: (id: string, data: { level: string, shared_with: string[] }) => api.patch(`/docs/${id}/privacy`, data),
   
   upload: (file: File) => {
     const formData = new FormData();

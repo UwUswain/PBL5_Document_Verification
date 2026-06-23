@@ -27,3 +27,7 @@ class PageMeta(BaseModel):
 class DocumentPageOut(BaseModel):
     items: List[DocumentOut]
     meta: PageMeta
+
+class PrivacyRequest(BaseModel):
+    level: str  # 'PRIVATE', 'SHARED', 'PUBLIC'
+    shared_with: List[str] = []

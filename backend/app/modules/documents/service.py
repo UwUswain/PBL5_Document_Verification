@@ -362,10 +362,19 @@ class DocumentService:
             
         doc, full_name = row
         
-        # Security check: Only owner or admin can view private documents
-        if not doc.is_public and doc.owner_id != current_user.id and current_user.role.value != "admin":
-            raise HTTPException(status_code=403, detail="Bạn không có quyền xem tài liệu này")
-            
+        # Security check
+        ai_results = doc.ai_results or {}
+        privacy_level = ai_results.get("privacy_level", "PRIVATE")
+        shared_with = ai_results.get("shared_with", [])
+        
+        is_owner_or_admin = (doc.owner_id == current_user.id or current_user.role.value == "admin")
+        
+        if not is_owner_or_admin:
+            if privacy_level == "PRIVATE":
+                raise HTTPException(status_code=403, detail="Tài liệu riêng tư, bạn không có quyền xem")
+            elif privacy_level == "SHARED" and current_user.email not in shared_with:
+                raise HTTPException(status_code=403, detail="Bạn không nằm trong danh sách được chia sẻ")
+            # If PUBLIC, anyone can view
         return {
             "id": doc.id,
             "file_name": doc.file_name,
@@ -384,3 +393,30 @@ class DocumentService:
             "owner_name": full_name,
             "is_public": doc.is_public
         }
+
+    @staticmethod
+    async def update_privacy(db: AsyncSession, doc_id: str, body: any, current_user: User):
+        result = await db.execute(select(Document).where(Document.id == uuid.UUID(doc_id)))
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+        if doc.owner_id != current_user.id and current_user.role.value != "admin":
+            raise HTTPException(status_code=403, detail="Chỉ chủ sở hữu mới được đổi quyền truy cập")
+            
+        ai_results = doc.ai_results or {}
+        ai_results["privacy_level"] = body.level
+        if body.level == "SHARED":
+            ai_results["shared_with"] = body.shared_with
+        else:
+            ai_results["shared_with"] = []
+            
+        doc.ai_results = ai_results
+        doc.is_public = (body.level == "PUBLIC")
+        
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(doc, "ai_results")
+        
+        await db.commit()
+        return {"message": "Cập nhật quyền truy cập thành công"}
