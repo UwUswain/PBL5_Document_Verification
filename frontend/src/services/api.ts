@@ -61,9 +61,12 @@ export const docService = {
   
   publicVerify: (token: string) => api.get(`/docs/verify/${token}`),
   
-  getDocs: (limit = 10, offset = 0) => api.get("/docs", { params: { limit, offset } }),
+  getDocs: (limit = 10, offset = 0, folder_id?: string, category?: string) => api.get("/docs", { params: { limit, offset, ...(folder_id && { folder_id }), ...(category && { category }) } }),
+  createFolder: (name: string) => api.post("/docs/folders", { name }),
+  renameFolder: (id: string, name: string) => api.put(`/docs/folders/${id}`, { name }),
+  moveDocument: (id: string, target_folder_id?: string | null) => api.patch(`/docs/${id}/move`, { target_folder_id }),
   getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
-  getSharedDocs: (limit = 10, offset = 0) => api.get("/docs/shared", { params: { limit, offset } }),
+  getSharedDocs: (limit = 10, offset = 0, query?: string) => api.get("/docs/shared", { params: { limit, offset, ...(query && { query }) } }),
   getDocById: (id: string) => api.get(`/docs/${id}`),
   chatWithDocument: (id: string, question: string) => api.post(`/docs/${id}/chat`, { question }),
   updatePrivacy: (id: string, data: { level: string, shared_with: string[] }) => api.patch(`/docs/${id}/privacy`, data),

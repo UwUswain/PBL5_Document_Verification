@@ -1,15 +1,14 @@
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status, Query
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
 from sqlalchemy import select, func
-from typing import List
-
 from app.db.database import get_db
 from app.core.security import get_current_user, role_required
 from app.modules.users.models import User
 from app.modules.documents.models import Document
 from app.modules.documents.service import DocumentService
-from app.modules.documents.schemas import DocumentOut, DocumentPageOut, PrivacyRequest
+from app.modules.documents.schemas import DocumentOut, DocumentPageOut, PrivacyRequest, FolderCreateRequest, MoveDocumentRequest
 from app.shared.utils.ai_service import chat_with_document_context
 from pydantic import BaseModel
 
@@ -67,6 +66,8 @@ async def get_public_documents(
 async def get_my_documents(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    folder_id: Optional[str] = None,
+    category: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -75,6 +76,8 @@ async def get_my_documents(
         current_user.id,
         limit=limit,
         offset=offset,
+        folder_id=folder_id,
+        category=category
     )
     return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
 
@@ -83,6 +86,7 @@ async def get_my_documents(
 async def get_shared_documents(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    query: str = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -91,9 +95,36 @@ async def get_shared_documents(
         current_user.email,
         limit=limit,
         offset=offset,
+        query=query
     )
     return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
 
+# 1.6 Folder Management
+@router.post("/folders", response_model=DocumentOut)
+async def create_folder(
+    data: FolderCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await DocumentService.create_folder(db, current_user.id, data.name)
+
+@router.put("/folders/{folder_id}", response_model=DocumentOut)
+async def rename_folder(
+    folder_id: str,
+    data: FolderCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await DocumentService.rename_folder(db, folder_id, current_user.id, data.name)
+
+@router.patch("/{document_id}/move")
+async def move_document(
+    document_id: str,
+    data: MoveDocumentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return await DocumentService.move_document(db, document_id, current_user.id, data.target_folder_id)
 
 # 2. Verify public (QR)
 @router.get("/verify/{public_token}", tags=["Public Verification"])

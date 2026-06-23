@@ -32,3 +32,9 @@ class DocumentPageOut(BaseModel):
 class PrivacyRequest(BaseModel):
     level: str  # 'PRIVATE', 'SHARED', 'PUBLIC'
     shared_with: List[str] = []
+
+class FolderCreateRequest(BaseModel):
+    name: str
+
+class MoveDocumentRequest(BaseModel):
+    target_folder_id: Optional[str] = None

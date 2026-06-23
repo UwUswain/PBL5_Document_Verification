@@ -9,7 +9,9 @@ import {
   EyeOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
-  TeamOutlined
+  TeamOutlined,
+  LockOutlined,
+  GlobalOutlined
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { docService } from '@/services/api';
@@ -23,13 +25,15 @@ export default function SharedDocumentsPage() {
   const { token } = theme.useToken();
   const isDarkMode = token.colorBgContainer === '#141414';
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tempSearch, setTempSearch] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const { data: resData, isLoading } = useQuery({
-    queryKey: ['shared_docs', currentPage, pageSize],
-    queryFn: () => docService.getSharedDocs(pageSize, (currentPage - 1) * pageSize).then(res => res.data),
+    queryKey: ['shared_docs', currentPage, pageSize, searchQuery],
+    queryFn: () => docService.getSharedDocs(pageSize, (currentPage - 1) * pageSize, searchQuery).then(res => res.data),
     refetchInterval: (query: any) => {
       const items = query.state.data?.items || [];
       const hasPending = items.some((doc: any) => !['COMPLETED', 'FAILED'].includes(doc.status?.toUpperCase()));
@@ -59,6 +63,22 @@ export default function SharedDocumentsPage() {
       dataIndex: 'category',
       key: 'category',
       render: (cat: string) => <Tag color="blue" style={{ borderRadius: 4 }}>{cat?.toUpperCase() || 'KHÁC'}</Tag>
+    },
+    {
+      title: 'Ngày chia sẻ',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (date: string) => <span style={{ color: '#64748b' }}>{new Date(date).toLocaleDateString('vi-VN')}</span>
+    },
+    {
+      title: 'Quyền truy cập',
+      key: 'privacy',
+      render: (_: any, record: any) => {
+        const privacy = record.ai_results?.privacy_level || 'PRIVATE';
+        if (privacy === 'SHARED') return <Tag icon={<TeamOutlined />} color="cyan">Shared</Tag>;
+        if (privacy === 'PUBLIC') return <Tag icon={<GlobalOutlined />} color="green">Public</Tag>;
+        return <Tag icon={<LockOutlined />} color="default">Private</Tag>;
+      }
     },
     {
       title: 'Thẩm định',
@@ -107,6 +127,24 @@ export default function SharedDocumentsPage() {
           <Text style={{ color: '#64748b', fontSize: 15, marginTop: 4, display: 'block' }}>
             Tài liệu bạn được cấp quyền xem từ người khác
           </Text>
+        </Col>
+        <Col>
+          <Space>
+            <Input 
+              placeholder="Tìm kiếm tài liệu..." 
+              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+              value={tempSearch}
+              onChange={(e) => setTempSearch(e.target.value)}
+              onPressEnter={() => {
+                setSearchQuery(tempSearch);
+                setCurrentPage(1);
+              }}
+              style={{ width: 300, borderRadius: 8 }}
+            />
+            <Button type="primary" onClick={() => { setSearchQuery(tempSearch); setCurrentPage(1); }}>
+              Tìm kiếm
+            </Button>
+          </Space>
         </Col>
       </Row>
 

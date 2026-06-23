@@ -272,24 +272,99 @@ class DocumentService:
         return True
 
     @staticmethod
-    async def list_my_documents(db: AsyncSession, owner_id, *, limit: int, offset: int):
-        total = await db.scalar(select(func.count()).select_from(Document).where(Document.owner_id == owner_id))
+    async def list_my_documents(db: AsyncSession, owner_id, *, limit: int, offset: int, folder_id: str = None, category: str = None):
+        conditions = [Document.owner_id == owner_id]
+        
+        if category and category.lower() != 'all':
+            conditions.append(Document.category.ilike(category))
+            
+        if folder_id:
+            conditions.append(Document.ai_results['folder_id'].astext == folder_id)
+        else:
+            # Root level: folder_id is null
+            conditions.append(Document.ai_results['folder_id'].astext.is_(None))
+
+        total = await db.scalar(select(func.count()).select_from(Document).where(*conditions))
         result = await db.execute(
-            select(Document).where(Document.owner_id == owner_id)
-            .order_by(Document.created_at.desc()).offset(offset).limit(limit)
+            select(Document).where(*conditions)
+            .order_by(Document.category.desc(), Document.created_at.desc())
+            .offset(offset).limit(limit)
         )
         return (total or 0), result.scalars().all()
 
     @staticmethod
-    async def list_shared_documents(db: AsyncSession, user_email: str, *, limit: int, offset: int):
+    async def create_folder(db: AsyncSession, owner_id: str, name: str):
+        import uuid
+        dummy_hash = str(uuid.uuid4())
+        doc = Document(
+            file_name=name,
+            file_path="folder",
+            sha256_hash=dummy_hash,
+            owner_id=owner_id,
+            status="COMPLETED",
+            verification_status="FOLDER",
+            category="FOLDER",
+            ai_results={"is_folder": True}
+        )
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+        return doc
+
+    @staticmethod
+    async def rename_folder(db: AsyncSession, folder_id: str, owner_id: str, name: str):
+        import uuid
+        stmt = select(Document).where(Document.id == uuid.UUID(folder_id), Document.owner_id == owner_id, Document.category == "FOLDER")
+        result = await db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Folder not found")
+        doc.file_name = name
+        await db.commit()
+        await db.refresh(doc)
+        return doc
+
+    @staticmethod
+    async def move_document(db: AsyncSession, document_id: str, owner_id: str, target_folder_id: str = None):
+        import uuid
+        stmt = select(Document).where(Document.id == uuid.UUID(document_id), Document.owner_id == owner_id)
+        result = await db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        # Prevent moving a folder into a folder (only 1 level deep for now)
+        if doc.category == "FOLDER" and target_folder_id:
+            raise HTTPException(status_code=400, detail="Cannot nest folders yet")
+            
+        ai_res = doc.ai_results or {}
+        if target_folder_id:
+            ai_res["folder_id"] = target_folder_id
+        else:
+            ai_res.pop("folder_id", None)
+            
+        from sqlalchemy.orm.attributes import flag_modified
+        doc.ai_results = ai_res
+        flag_modified(doc, "ai_results")
+        
+        await db.commit()
+        await db.refresh(doc)
+        return doc
+
+    @staticmethod
+    async def list_shared_documents(db: AsyncSession, user_email: str, *, limit: int, offset: int, query: str = None):
         from sqlalchemy import cast, String
-        condition = (
+        conditions = [
             Document.ai_results['privacy_level'].astext == 'SHARED',
             cast(Document.ai_results, String).like(f'%"{user_email}"%')
-        )
-        total = await db.scalar(select(func.count()).select_from(Document).where(*condition))
+        ]
         
-        stmt = select(Document, User.full_name).join(User, Document.owner_id == User.id).where(*condition).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+        if query:
+            conditions.append(Document.file_name.ilike(f'%{query}%'))
+            
+        total = await db.scalar(select(func.count()).select_from(Document).where(*conditions))
+        
+        stmt = select(Document, User.full_name).join(User, Document.owner_id == User.id).where(*conditions).order_by(Document.created_at.desc()).offset(offset).limit(limit)
         result = await db.execute(stmt)
         
         docs = []
