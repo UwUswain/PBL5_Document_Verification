@@ -6,6 +6,7 @@ async def init_db():
     # Import tất cả models vào đây để SQLAlchemy thấy được
     from app.modules.users.models import User
     from app.modules.documents.models import Document
+    from app.modules.audit.models import AuditLog
 
     async with engine.begin() as conn:
         # Tự động tạo bảng nếu chưa có (Rất tiện khi demo cho thầy)

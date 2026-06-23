@@ -68,9 +68,14 @@ export const docService = {
   getPublicDocs: (limit = 10, offset = 0, category?: string, owner?: string, date?: string, keyword?: string) => 
     api.get("/docs/public", { params: { limit, offset, ...(category && {category}), ...(owner && {owner}), ...(date && {date}), ...(keyword && {keyword}) } }),
   getSharedDocs: (limit = 10, offset = 0, query?: string) => api.get("/docs/shared", { params: { limit, offset, ...(query && { query }) } }),
+  getTrashedDocs: (limit = 10, offset = 0) => api.get("/docs/trash/list", { params: { limit, offset } }),
+  restoreDoc: (id: string) => api.patch(`/docs/${id}/restore`),
+  forceDeleteDoc: (id: string) => api.delete(`/docs/${id}/force`),
   getDocById: (id: string) => api.get(`/docs/${id}`),
   chatWithDocument: (id: string, question: string) => api.post(`/docs/${id}/chat`, { question }),
   updatePrivacy: (id: string, data: { level: string, shared_with: string[] }) => api.patch(`/docs/${id}/privacy`, data),
+  getAuditLogs: (limit = 20, offset = 0, user_email?: string, action?: string, date?: string) => 
+    api.get("/audit", { params: { limit, offset, ...(user_email && {user_email}), ...(action && {action}), ...(date && {date}) } }),
   
   upload: (file: File) => {
     const formData = new FormData();

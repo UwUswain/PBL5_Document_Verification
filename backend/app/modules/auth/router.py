@@ -45,4 +45,8 @@ async def login(
         role=user.role.value 
     )
     
+    from app.modules.audit.service import AuditService
+    await AuditService.log_action(db, user.email, "LOGIN")
+    await db.commit()
+    
     return {"access_token": access_token, "token_type": "bearer", "role": user.role.value}

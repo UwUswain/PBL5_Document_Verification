@@ -260,20 +260,66 @@ class DocumentService:
         if doc.owner_id != current_user.id and current_user.role.value != "admin":
             raise HTTPException(status_code=403, detail="Không có quyền xóa tài liệu này")
         
-        # Xóa file vật lý (tùy chọn, ở đây giữ lại backup hoặc xóa hẳn)
-        # try: os.remove(doc.file_path) except: pass
+        # Soft Delete instead of Hard Delete
+        from datetime import datetime
+        doc.deleted_at = datetime.now()
+        
+        # Log Audit
+        from app.modules.audit.service import AuditService
+        await AuditService.log_action(db, current_user.email, "DELETE_DOCUMENT", str(doc.id), doc.file_name)
+        
+        await db.commit()
+        return True
+
+    @staticmethod
+    async def force_delete_document(db: AsyncSession, document_id: str, current_user):
+        from app.shared.utils.vector_service import delete_from_vector_db
+        stmt = select(Document).where(Document.id == uuid.UUID(document_id))
+        result = await db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+        if doc.owner_id != current_user.id and current_user.role.value != "admin":
+            raise HTTPException(status_code=403, detail="Không có quyền xóa tài liệu này")
         
         # Xóa khỏi Vector DB
         await delete_from_vector_db(str(doc.id))
         
-        # Xóa khỏi Postgres
+        # Xóa khỏi Postgres (Hard Delete)
         await db.delete(doc)
+        
+        # Log Audit
+        from app.modules.audit.service import AuditService
+        await AuditService.log_action(db, current_user.email, "FORCE_DELETE_DOCUMENT", str(doc.id), doc.file_name)
+        
+        await db.commit()
+        return True
+
+    @staticmethod
+    async def restore_document(db: AsyncSession, document_id: str, current_user):
+        stmt = select(Document).where(Document.id == uuid.UUID(document_id))
+        result = await db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+            
+        if doc.owner_id != current_user.id and current_user.role.value != "admin":
+            raise HTTPException(status_code=403, detail="Không có quyền khôi phục tài liệu này")
+            
+        doc.deleted_at = None
+        
+        from app.modules.audit.service import AuditService
+        await AuditService.log_action(db, current_user.email, "RESTORE_DOCUMENT", str(doc.id), doc.file_name)
+        
         await db.commit()
         return True
 
     @staticmethod
     async def list_my_documents(db: AsyncSession, owner_id, *, limit: int, offset: int, folder_id: str = None, category: str = None):
-        conditions = [Document.owner_id == owner_id]
+        conditions = [Document.owner_id == owner_id, Document.deleted_at.is_(None)]
         
         if category and category.lower() != 'all':
             conditions.append(Document.category.ilike(category))
@@ -288,6 +334,17 @@ class DocumentService:
         result = await db.execute(
             select(Document).where(*conditions)
             .order_by(Document.category.desc(), Document.created_at.desc())
+            .offset(offset).limit(limit)
+        )
+        return (total or 0), result.scalars().all()
+
+    @staticmethod
+    async def get_trashed_documents(db: AsyncSession, owner_id, *, limit: int, offset: int):
+        conditions = [Document.owner_id == owner_id, Document.deleted_at.is_not(None)]
+        total = await db.scalar(select(func.count()).select_from(Document).where(*conditions))
+        result = await db.execute(
+            select(Document).where(*conditions)
+            .order_by(Document.deleted_at.desc())
             .offset(offset).limit(limit)
         )
         return (total or 0), result.scalars().all()
@@ -347,6 +404,9 @@ class DocumentService:
         doc.ai_results = ai_res
         flag_modified(doc, "ai_results")
         
+        from app.modules.audit.service import AuditService
+        await AuditService.log_action(db, owner_id, "MOVE_DOCUMENT", str(doc.id), doc.file_name)
+        
         await db.commit()
         await db.refresh(doc)
         return doc
@@ -356,7 +416,8 @@ class DocumentService:
         from sqlalchemy import cast, String
         conditions = [
             Document.ai_results['privacy_level'].astext == 'SHARED',
-            cast(Document.ai_results, String).like(f'%"{user_email}"%')
+            cast(Document.ai_results, String).like(f'%"{user_email}"%'),
+            Document.deleted_at.is_(None)
         ]
         
         if query:
@@ -377,7 +438,8 @@ class DocumentService:
     @staticmethod
     async def list_public_documents(db: AsyncSession, limit: int, offset: int, category: str = None, owner: str = None, date: str = None, keyword: str = None):
         conditions = [
-            Document.ai_results['privacy_level'].astext == 'PUBLIC'
+            Document.ai_results['privacy_level'].astext == 'PUBLIC',
+            Document.deleted_at.is_(None)
         ]
         
         if keyword:
@@ -551,6 +613,9 @@ class DocumentService:
         
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(doc, "ai_results")
+        
+        from app.modules.audit.service import AuditService
+        await AuditService.log_action(db, current_user.email, "CHANGE_PRIVACY", str(doc.id), doc.file_name)
         
         await db.commit()
         return {"message": "Cập nhật quyền truy cập thành công"}

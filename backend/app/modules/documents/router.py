@@ -161,11 +161,15 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return await DocumentService.create_document_pipeline(
+    doc = await DocumentService.create_document_pipeline(
         db=db,
         file=file,
         user_id=current_user.id
     )
+    from app.modules.audit.service import AuditService
+    await AuditService.log_action(db, current_user.email, "UPLOAD_DOCUMENT", str(doc.id), doc.file_name)
+    await db.commit()
+    return doc
 
 
 # 4. AI Search (FIXED)
@@ -231,6 +235,37 @@ async def delete_document(
     current_user: User = Depends(get_current_user)
 ):
     await DocumentService.delete_document(db, document_id, current_user)
+    return None
+
+# 7.1 Trash Management
+@router.get("/trash/list", response_model=DocumentPageOut)
+async def get_trashed_documents(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    total, items = await DocumentService.get_trashed_documents(
+        db, current_user.id, limit=limit, offset=offset
+    )
+    return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
+
+@router.patch("/{document_id}/restore")
+async def restore_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await DocumentService.restore_document(db, document_id, current_user)
+    return {"message": "Khôi phục thành công"}
+
+@router.delete("/{document_id}/force", status_code=status.HTTP_204_NO_CONTENT)
+async def force_delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await DocumentService.force_delete_document(db, document_id, current_user)
     return None
 
 # 8. Lấy chi tiết tài liệu theo ID

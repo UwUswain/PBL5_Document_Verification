@@ -51,6 +51,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           { key: '/shared', icon: <TeamOutlined />, label: 'Shared With Me' },
           { key: '/public', icon: <GlobalOutlined />, label: 'Knowledge Repository' },
           { key: '/history', icon: <HistoryOutlined />, label: t('history') || 'Processing History' },
+          { key: '/trash', icon: <DeleteOutlined />, label: 'Recycle Bin' },
         ]
       },
     ];
@@ -60,7 +61,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         type: 'group',
         label: !collapsed && <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginLeft: 8 }}>ADMINISTRATION</span>,
         children: [
+          { key: '/admin/pending', icon: <FileProtectOutlined />, label: 'Pending Verification' },
           { key: '/users', icon: <TeamOutlined />, label: 'User Management' },
+          { key: '/audit', icon: <UnorderedListOutlined />, label: 'Audit Logs' },
         ]
       });
     }
