@@ -65,7 +65,8 @@ export const docService = {
   createFolder: (name: string) => api.post("/docs/folders", { name }),
   renameFolder: (id: string, name: string) => api.put(`/docs/folders/${id}`, { name }),
   moveDocument: (id: string, target_folder_id?: string | null) => api.patch(`/docs/${id}/move`, { target_folder_id }),
-  getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
+  getPublicDocs: (limit = 10, offset = 0, category?: string, owner?: string, date?: string, keyword?: string) => 
+    api.get("/docs/public", { params: { limit, offset, ...(category && {category}), ...(owner && {owner}), ...(date && {date}), ...(keyword && {keyword}) } }),
   getSharedDocs: (limit = 10, offset = 0, query?: string) => api.get("/docs/shared", { params: { limit, offset, ...(query && { query }) } }),
   getDocById: (id: string) => api.get(`/docs/${id}`),
   chatWithDocument: (id: string, question: string) => api.post(`/docs/${id}/chat`, { question }),

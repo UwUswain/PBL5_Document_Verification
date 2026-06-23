@@ -56,9 +56,15 @@ async def get_dashboard_stats(
 async def get_public_documents(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    category: Optional[str] = None,
+    owner: Optional[str] = None,
+    date: Optional[str] = None,
+    keyword: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    total, items = await DocumentService.list_public_documents(db, limit, offset)
+    total, items = await DocumentService.list_public_documents(
+        db, limit, offset, category, owner, date, keyword
+    )
     return {"items": items, "meta": {"limit": limit, "offset": offset, "total": total}}
 
 # 1. Lấy danh sách tài liệu của user

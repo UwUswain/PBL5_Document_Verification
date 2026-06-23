@@ -49,6 +49,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },
           { key: '/search', icon: <SearchOutlined />, label: t('search') || 'Search' },
           { key: '/shared', icon: <TeamOutlined />, label: 'Shared With Me' },
+          { key: '/public', icon: <GlobalOutlined />, label: 'Knowledge Repository' },
           { key: '/history', icon: <HistoryOutlined />, label: t('history') || 'Processing History' },
         ]
       },

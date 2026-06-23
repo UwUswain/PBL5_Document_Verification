@@ -375,6 +375,46 @@ class DocumentService:
         return (total or 0), docs
 
     @staticmethod
+    async def list_public_documents(db: AsyncSession, limit: int, offset: int, category: str = None, owner: str = None, date: str = None, keyword: str = None):
+        conditions = [
+            Document.ai_results['privacy_level'].astext == 'PUBLIC'
+        ]
+        
+        if keyword:
+            conditions.append(Document.file_name.ilike(f'%{keyword}%'))
+        
+        if category and category.lower() != 'all':
+            conditions.append(Document.category.ilike(category))
+            
+        if date:
+            from sqlalchemy import cast, Date
+            from datetime import datetime
+            try:
+                parsed_date = datetime.strptime(date, '%Y-%m-%d').date()
+                conditions.append(cast(Document.created_at, Date) == parsed_date)
+            except ValueError:
+                pass
+                
+        stmt_count = select(func.count()).select_from(Document)
+        stmt_data = select(Document, User.full_name).join(User, Document.owner_id == User.id)
+        
+        if owner:
+            conditions.append(User.full_name.ilike(f'%{owner}%'))
+            stmt_count = stmt_count.join(User, Document.owner_id == User.id)
+            
+        total = await db.scalar(stmt_count.where(*conditions))
+        
+        stmt = stmt_data.where(*conditions).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+        result = await db.execute(stmt)
+        
+        docs = []
+        for doc, fname in result:
+            doc.owner_name = fname
+            docs.append(doc)
+            
+        return (total or 0), docs
+
+    @staticmethod
     async def list_pending_review(db: AsyncSession, limit: int, offset: int):
         """Lấy danh sách các văn bản cần Admin kiểm tra thủ công"""
         query = select(Document).where(
