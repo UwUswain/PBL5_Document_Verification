@@ -27,6 +27,7 @@ import {
   GlobalOutlined
 } from '@ant-design/icons';
 import { docService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -35,6 +36,7 @@ export default function DocumentDetailPage() {
   const router = useRouter();
   const docId = params.id as string;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [chatInput, setChatInput] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: string, text: string}[]>([]);
@@ -146,6 +148,8 @@ export default function DocumentDetailPage() {
     { title: 'Verification', description: document.updated_at ? new Date(document.updated_at).toLocaleString('vi-VN') : '' }
   ];
 
+  const isOwner = user?.id === document?.owner_id;
+
   return (
     <>
       <style dangerouslySetInnerHTML={{__html: `
@@ -169,19 +173,23 @@ export default function DocumentDetailPage() {
               <Title level={3} style={{ margin: 0, color: '#0f172a' }}>{document.file_name}</Title>
               <Space>
                 <Text type="secondary">ID: {document.id}</Text>
-                <Divider type="vertical" />
-                <Select
-                  value={document?.ai_results?.privacy_level || 'PRIVATE'}
-                  onChange={handlePrivacyChange}
-                  style={{ width: 110 }}
-                  variant="borderless"
-                  options={[
-                    { value: 'PRIVATE', label: <span style={{ color: '#475569' }}><LockOutlined /> Private</span> },
-                    { value: 'SHARED', label: <span style={{ color: '#0284c7' }}><TeamOutlined /> Shared</span> },
-                    { value: 'PUBLIC', label: <span style={{ color: '#16a34a' }}><GlobalOutlined /> Public</span> },
-                  ]}
-                  dropdownStyle={{ borderRadius: 8 }}
-                />
+                {isOwner && (
+                  <>
+                    <Divider type="vertical" />
+                    <Select
+                      value={document?.ai_results?.privacy_level || 'PRIVATE'}
+                      onChange={handlePrivacyChange}
+                      style={{ width: 110 }}
+                      variant="borderless"
+                      options={[
+                        { value: 'PRIVATE', label: <span style={{ color: '#475569' }}><LockOutlined /> Private</span> },
+                        { value: 'SHARED', label: <span style={{ color: '#0284c7' }}><TeamOutlined /> Shared</span> },
+                        { value: 'PUBLIC', label: <span style={{ color: '#16a34a' }}><GlobalOutlined /> Public</span> },
+                      ]}
+                      dropdownStyle={{ borderRadius: 8 }}
+                    />
+                  </>
+                )}
               </Space>
             </div>
           </div>

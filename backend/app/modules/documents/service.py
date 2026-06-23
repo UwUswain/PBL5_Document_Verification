@@ -281,6 +281,25 @@ class DocumentService:
         return (total or 0), result.scalars().all()
 
     @staticmethod
+    async def list_shared_documents(db: AsyncSession, user_email: str, *, limit: int, offset: int):
+        from sqlalchemy import cast, String
+        condition = (
+            Document.ai_results['privacy_level'].astext == 'SHARED',
+            cast(Document.ai_results, String).like(f'%"{user_email}"%')
+        )
+        total = await db.scalar(select(func.count()).select_from(Document).where(*condition))
+        
+        stmt = select(Document, User.full_name).join(User, Document.owner_id == User.id).where(*condition).order_by(Document.created_at.desc()).offset(offset).limit(limit)
+        result = await db.execute(stmt)
+        
+        docs = []
+        for doc, fname in result:
+            doc.owner_name = fname
+            docs.append(doc)
+            
+        return (total or 0), docs
+
+    @staticmethod
     async def list_pending_review(db: AsyncSession, limit: int, offset: int):
         """Lấy danh sách các văn bản cần Admin kiểm tra thủ công"""
         query = select(Document).where(

@@ -22,9 +22,11 @@ interface DocumentDetailDrawerProps {
   onClose: () => void;
   onUpdate?: () => void; // Callback để load lại dữ liệu sau khi verify
 }
+import { useAuth } from '@/hooks/useAuth';
 
 export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: DocumentDetailDrawerProps) {
   const { token } = theme.useToken();
+  const { user } = useAuth();
   const [cropModalVisible, setCropModalVisible] = useState(false);
   const isDarkMode = token.colorBgContainer === '#141414';
 
@@ -32,6 +34,7 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
 
   const isSuspicious = document.verification_status === 'SUSPICIOUS';
   const isVerified = document.verification_status === 'VERIFIED';
+  const isOwner = user?.id === document?.owner_id;
 
   return (
     <Drawer
@@ -58,7 +61,7 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
       styles={{ body: { padding: 0, backgroundColor: token.colorBgLayout, overflow: 'hidden' } }}
       extra={
         <Space>
-          {isSuspicious && (
+          {isSuspicious && isOwner && (
             <Button 
               type="primary" 
               danger 
@@ -107,9 +110,11 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
                 type="warning"
                 showIcon
                 action={
-                  <Button size="small" type="primary" danger onClick={() => setCropModalVisible(true)}>
-                    Xử lý ngay
-                  </Button>
+                  isOwner ? (
+                    <Button size="small" type="primary" danger onClick={() => setCropModalVisible(true)}>
+                      Xử lý ngay
+                    </Button>
+                  ) : null
                 }
               />
             )}
@@ -197,15 +202,17 @@ export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: Docu
             <section>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <Title level={5} style={{ margin: 0, fontSize: 12, letterSpacing: '1px' }}>KHU VỰC KIỂM CHỨNG</Title>
-                <Button 
-                  size="small" 
-                  type="link" 
-                  icon={<EditOutlined />} 
-                  onClick={() => setCropModalVisible(true)}
-                  style={{ fontSize: 12, fontWeight: 700 }}
-                >
-                  CẮT ẢNH THỦ CÔNG
-                </Button>
+                {isOwner && (
+                  <Button 
+                    size="small" 
+                    type="link" 
+                    icon={<EditOutlined />} 
+                    onClick={() => setCropModalVisible(true)}
+                    style={{ fontSize: 12, fontWeight: 700 }}
+                  >
+                    CẮT ẢNH THỦ CÔNG
+                  </Button>
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <AutoZoomCard 

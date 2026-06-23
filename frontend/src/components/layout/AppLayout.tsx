@@ -48,6 +48,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           { key: '/dashboard', icon: <AppstoreOutlined />, label: t('dashboard') || 'Dashboard' },
           { key: '/repository', icon: <FileTextOutlined />, label: t('repository') || 'Repository' },
           { key: '/search', icon: <SearchOutlined />, label: t('search') || 'Search' },
+          { key: '/shared', icon: <TeamOutlined />, label: 'Shared With Me' },
           { key: '/history', icon: <HistoryOutlined />, label: t('history') || 'Processing History' },
         ]
       },

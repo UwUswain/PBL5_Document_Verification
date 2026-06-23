@@ -13,6 +13,7 @@ class DocumentOut(BaseModel):
     ai_results: Optional[Dict[str, Any]] = {}
     file_path: Optional[str] = None
     qr_path: Optional[str] = None
+    owner_id: Optional[UUID] = None
     owner_name: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

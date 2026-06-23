@@ -63,6 +63,7 @@ export const docService = {
   
   getDocs: (limit = 10, offset = 0) => api.get("/docs", { params: { limit, offset } }),
   getPublicDocs: (limit = 10, offset = 0) => api.get("/docs/public", { params: { limit, offset } }),
+  getSharedDocs: (limit = 10, offset = 0) => api.get("/docs/shared", { params: { limit, offset } }),
   getDocById: (id: string) => api.get(`/docs/${id}`),
   chatWithDocument: (id: string, question: string) => api.post(`/docs/${id}/chat`, { question }),
   updatePrivacy: (id: string, data: { level: string, shared_with: string[] }) => api.patch(`/docs/${id}/privacy`, data),
