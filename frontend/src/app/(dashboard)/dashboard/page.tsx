@@ -410,6 +410,50 @@ export default function DashboardTealPage() {
               <Text type="secondary" style={{ fontSize: 14 }}>Hệ thống phân tích văn bản hành chính thông minh</Text>
             </div>
             <Space>
+              <Button 
+                icon={<FilePdfOutlined style={{ color: '#ef4444' }} />} 
+                onClick={async () => {
+                  try {
+                    const res = await docService.exportPdf();
+                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    const disposition = res.headers['content-disposition'];
+                    let filename = 'report.pdf';
+                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '');
+                    }
+                    link.setAttribute('download', filename);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch (e) {
+                    message.error("Lỗi xuất PDF");
+                  }
+                }}
+              >Export PDF</Button>
+              <Button 
+                icon={<FileTextOutlined style={{ color: '#10b981' }} />} 
+                onClick={async () => {
+                  try {
+                    const res = await docService.exportExcel();
+                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    const disposition = res.headers['content-disposition'];
+                    let filename = 'report.xlsx';
+                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '');
+                    }
+                    link.setAttribute('download', filename);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  } catch (e) {
+                    message.error("Lỗi xuất Excel");
+                  }
+                }}
+              >Export Excel</Button>
               <Button icon={<FilterOutlined />} style={{ fontWeight: 500, borderColor: '#cbd5e1' }}>Filter</Button>
               <Button type="primary" icon={<UploadOutlined />} style={{ backgroundColor: '#008080', fontWeight: 600 }} onClick={() => setIsUploadModalOpen(true)}>Upload Document</Button>
             </Space>

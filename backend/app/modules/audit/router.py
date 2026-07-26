@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-from app.db.base import get_db
+from app.db.database import get_db
 from app.modules.users.models import User
-from app.modules.auth.dependencies import get_current_user
+from app.core.security import get_current_user
 from .schemas import AuditLogPageOut
 from .service import AuditService
 

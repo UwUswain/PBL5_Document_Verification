@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy import func, delete, case
 
 from app.modules.documents.models import Document
+from app.modules.users.models import User
 from app.modules.documents.ai_logic import SealDetector
 from app.shared.utils.hash_services import calculate_sha256
 from app.shared.utils.qr_services import generate_document_qr
@@ -325,10 +326,10 @@ class DocumentService:
             conditions.append(Document.category.ilike(category))
             
         if folder_id:
-            conditions.append(Document.ai_results['folder_id'].astext == folder_id)
+            conditions.append(Document.ai_results.op('->>')('folder_id') == folder_id)
         else:
             # Root level: folder_id is null
-            conditions.append(Document.ai_results['folder_id'].astext.is_(None))
+            conditions.append(Document.ai_results.op('->>')('folder_id').is_(None))
 
         total = await db.scalar(select(func.count()).select_from(Document).where(*conditions))
         result = await db.execute(
@@ -415,7 +416,7 @@ class DocumentService:
     async def list_shared_documents(db: AsyncSession, user_email: str, *, limit: int, offset: int, query: str = None):
         from sqlalchemy import cast, String
         conditions = [
-            Document.ai_results['privacy_level'].astext == 'SHARED',
+            Document.ai_results.op('->>')('privacy_level') == 'SHARED',
             cast(Document.ai_results, String).like(f'%"{user_email}"%'),
             Document.deleted_at.is_(None)
         ]
@@ -438,7 +439,7 @@ class DocumentService:
     @staticmethod
     async def list_public_documents(db: AsyncSession, limit: int, offset: int, category: str = None, owner: str = None, date: str = None, keyword: str = None):
         conditions = [
-            Document.ai_results['privacy_level'].astext == 'PUBLIC',
+            Document.ai_results.op('->>')('privacy_level') == 'PUBLIC',
             Document.deleted_at.is_(None)
         ]
         
@@ -493,52 +494,6 @@ class DocumentService:
         result = await db.execute(query)
         return (total or 0), result.scalars().all()
 
-    @staticmethod
-    async def list_public_documents(db: AsyncSession, limit: int, offset: int):
-        from app.modules.users.models import User
-        
-        query = select(Document, User.full_name).join(
-            User, Document.owner_id == User.id
-        ).where(
-            Document.is_public == True,
-            Document.status == "COMPLETED"
-        ).order_by(Document.created_at.desc()).offset(offset).limit(limit)
-        
-        count_query = select(func.count()).select_from(Document).where(
-            Document.is_public == True, 
-            Document.status == "COMPLETED"
-        )
-        
-        total = await db.scalar(count_query)
-        result = await db.execute(query)
-        
-        rows = result.all()
-        items = []
-        for doc, full_name in rows:
-            # Ẩn danh một phần tên (Vd: Lê Văn A -> L*** A)
-            parts = full_name.split()
-            if len(parts) >= 2:
-                hidden_name = f"{parts[0]} *** {parts[-1]}"
-            else:
-                hidden_name = full_name
-                
-            doc_out = {
-                "id": doc.id,
-                "file_name": doc.file_name,
-                "sha256_hash": doc.sha256_hash,
-                "status": doc.status,
-                "category": doc.category,
-                "summary": doc.summary,
-                "ai_results": doc.ai_results,
-                "file_path": doc.file_path,
-                "qr_path": doc.qr_path,
-                "created_at": doc.created_at,
-                "updated_at": doc.updated_at,
-                "owner_name": hidden_name
-            }
-            items.append(doc_out)
-            
-        return (total or 0), items
 
     @staticmethod
     async def get_document_by_id(db: AsyncSession, doc_id: str, current_user):

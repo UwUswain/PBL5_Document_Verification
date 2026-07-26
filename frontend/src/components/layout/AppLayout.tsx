@@ -10,7 +10,10 @@ import {
   BulbOutlined,
   BulbFilled,
   TeamOutlined,
-  HistoryOutlined
+  HistoryOutlined,
+  DeleteOutlined,
+  FileProtectOutlined,
+  UnorderedListOutlined
 } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';

@@ -4,9 +4,9 @@ from typing import Optional
 from sqlalchemy import String, ForeignKey, JSON, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
-from app.db.base import Base, UUIDMixin, TimestampMixin
+from app.db.base import Base, UUIDMixin, TimestampMixin, SoftDeleteMixin
 
-class Document(Base, UUIDMixin, TimestampMixin):
+class Document(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "documents"
 
     # # 1. Chủ sở hữu (Nối với bảng users)

@@ -76,6 +76,8 @@ export const docService = {
   updatePrivacy: (id: string, data: { level: string, shared_with: string[] }) => api.patch(`/docs/${id}/privacy`, data),
   getAuditLogs: (limit = 20, offset = 0, user_email?: string, action?: string, date?: string) => 
     api.get("/audit", { params: { limit, offset, ...(user_email && {user_email}), ...(action && {action}), ...(date && {date}) } }),
+  exportPdf: () => api.get('/docs/export/pdf', { responseType: 'blob' }),
+  exportExcel: () => api.get('/docs/export/excel', { responseType: 'blob' }),
   
   upload: (file: File) => {
     const formData = new FormData();

@@ -22,7 +22,7 @@ interface DocumentDetailDrawerProps {
   onClose: () => void;
   onUpdate?: () => void; // Callback để load lại dữ liệu sau khi verify
 }
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/providers/AuthProvider';
 
 export function DocumentDetailDrawer({ document, open, onClose, onUpdate }: DocumentDetailDrawerProps) {
   const { token } = theme.useToken();

@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from sqlalchemy import select, func
@@ -16,6 +16,39 @@ class ChatRequest(BaseModel):
     question: str
 
 router = APIRouter()
+
+# 0.1 Exports
+@router.get("/export/pdf", tags=["Export"])
+async def export_pdf(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.modules.documents.export_service import ExportService
+    from datetime import datetime
+    pdf_bytes = await ExportService.export_pdf(db)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"report_{current_user.id}_{timestamp}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@router.get("/export/excel", tags=["Export"])
+async def export_excel(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.modules.documents.export_service import ExportService
+    from datetime import datetime
+    excel_bytes = await ExportService.export_excel(db)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"report_{current_user.id}_{timestamp}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 # 0. Dashboard Stats
 @router.get("/dashboard/stats", tags=["Dashboard"])
